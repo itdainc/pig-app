@@ -1,11 +1,13 @@
 import streamlit as st
 import pandas as pd
+import io
 
 st.set_page_config(page_title="도축 스펙 거래처 자동 배정", layout="wide", page_icon="🐖")
 
 st.title("🐖 돼지 도축 스펙 거래처 자동 배정 시스템")
 st.markdown("도축 등급판정 파일과 거래처 스팩 파일을 업로드하면 최적의 거래처를 자동으로 배정합니다.")
 
+# ----------------- 왼쪽 사이드바 -----------------
 st.sidebar.header("📁 파일 업로드")
 uploaded_grade = st.sidebar.file_uploader("1. 등급판정 결과 파일 (.xls/.xlsx)", type=["xls", "xlsx"])
 uploaded_spec = st.sidebar.file_uploader("2. 거래처 스팩 파일 (.xlsx)", type=["xlsx"])
@@ -61,6 +63,13 @@ if uploaded_grade and uploaded_spec:
                 matched = pigs[cond].head(req_cnt)
                 pigs.loc[matched.index, '배정거래처'] = company
 
+        # 사이드바 구분선 및 요약 표 배치
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("📊 거래처별 배정 요약")
+        summary = pigs[pigs['배정거래처'] != '미배정'].groupby(['배정거래처', '성별']).size().unstack(fill_value=0)
+        st.sidebar.dataframe(summary, use_container_width=True, height=400)
+
+        # ----------------- 오른쪽 메인 화면 -----------------
         total_pigs = len(pigs)
         assigned_pigs = len(pigs[pigs['배정거래처'] != '미배정'])
         unassigned_pigs = len(pigs[pigs['배정거래처'] == '미배정'])
@@ -70,12 +79,30 @@ if uploaded_grade and uploaded_spec:
         c2.metric("거래처 배정 완료", f"{assigned_pigs} 두")
         c3.metric("미배정 수량", f"{unassigned_pigs} 두")
 
-        st.subheader("📊 거래처별 배정 현황 요약")
-        summary = pigs[pigs['배정거래처'] != '미배정'].groupby(['배정거래처', '성별']).size().unstack(fill_value=0)
-        st.dataframe(summary, use_container_width=True)
+        st.markdown("---")
+        
+        # 세부 내역 영역 (폭을 줄이기 위해 컬럼 분할)
+        col_main, col_empty = st.columns([3, 1])
+        
+        with col_main:
+            st.subheader("📋 전체 개체별 세부 배정 내역")
+            
+            # 엑셀 다운로드 버튼 추가
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                pigs.to_excel(writer, sheet_name='배정내역', index=False)
+                summary.to_excel(writer, sheet_name='요약')
+            processed_data = output.getvalue()
+            
+            st.download_button(
+                label="📥 배정 결과 엑셀 다운로드",
+                data=processed_data,
+                file_name="돼지_도축_자동배정결과.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
-        st.subheader("📋 전체 개체별 세부 배정 내역")
-        st.dataframe(pigs, use_container_width=True)
+            # 세로로 긴 표 형태 (높이 600px 지정)
+            st.dataframe(pigs, height=600, use_container_width=True)
 
     except Exception as e:
         st.error(f"파일을 읽는 도중 오류가 발생했습니다: {e}")
