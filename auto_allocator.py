@@ -28,28 +28,63 @@ TARGET_COUNTS = {
 }
 
 # ==============================================================================
-# 📌 [2] 거래처별 스펙 및 우선순위 기본 데이터
+# 📌 [2] 거래처별 스펙 및 서브 스펙(1, 2) 기본 데이터
 # ==============================================================================
 DEFAULT_SPECS = [
-    {"업체명": "염주골", "우선순위": 1, "목표두수": TARGET_COUNTS.get("염주골", 20), "지급률": "105.0%", "중량(kg)": "98~109", "등지방(mm)": "20~27", "등급": "2", "암 비율": "50%", "배제농가": ""},
-    {"업체명": "마루푸드", "우선순위": 2, "목표두수": TARGET_COUNTS.get("마루푸드", 15), "지급률": "105.0%", "중량(kg)": "82~105", "등지방(mm)": "29~35", "등급": "1,1+,2", "암 비율": "50%", "배제농가": ""},
-    {"업체명": "프라임미트", "우선순위": 3, "목표두수": TARGET_COUNTS.get("프라임미트", 110), "지급률": "104.5%", "중량(kg)": "80~103", "등지방(mm)": "20~34", "등급": "1,1+,2", "암 비율": "70%", "배제농가": ""},
-    {"업체명": "흥부축산", "우선순위": 4, "목표두수": TARGET_COUNTS.get("흥부축산", 25), "지급률": "103.5%", "중량(kg)": "75~86", "등지방(mm)": "18~22", "등급": "1,1+,2", "암 비율": "60%", "배제농가": ""},
-    {"업체명": "자운", "우선순위": 5, "목표두수": TARGET_COUNTS.get("자운", 15), "지급률": "107.5%", "중량(kg)": "85~95", "등지방(mm)": "22~25", "등급": "1,1+", "암 비율": "100%", "배제농가": ""},
-    {"업체명": "승민", "우선순위": 6, "목표두수": TARGET_COUNTS.get("승민", 5), "지급률": "107.5%", "중량(kg)": "84~88", "등지방(mm)": "20~22", "등급": "1,1+", "암 비율": "100%", "배제농가": ""},
-    {"업체명": "제이이", "우선순위": 7, "목표두수": TARGET_COUNTS.get("제이이", 15), "지급률": "107.0%", "중량(kg)": "88~97", "등지방(mm)": "25~27", "등급": "1,1+", "암 비율": "50%", "배제농가": ""},
-    {"업체명": "돼랑이", "우선순위": 8, "목표두수": TARGET_COUNTS.get("돼랑이", 10), "지급률": "105.0%", "중량(kg)": "85~90", "등지방(mm)": "25~26", "등급": "1,1+", "암 비율": "50%", "배제농가": ""},
-    {"업체명": "민강", "우선순위": 9, "목표두수": TARGET_COUNTS.get("민강", 60), "지급률": "107.0%", "중량(kg)": "85~97", "등지방(mm)": "21~25", "등급": "1,1+", "암 비율": "50%", "배제농가": ""},
-    {"업체명": "대용식품", "우선순위": 10, "목표두수": TARGET_COUNTS.get("대용식품", 15), "지급률": "107.0%", "중량(kg)": "85~89", "등지방(mm)": "18~21", "등급": "1,1+", "암 비율": "60%", "배제농가": ""},
-    {"업체명": "명성", "우선순위": 11, "목표두수": TARGET_COUNTS.get("명성", 4), "지급률": "107.0%", "중량(kg)": "87~97", "등지방(mm)": "20~22", "등급": "1,1+", "암 비율": "80%", "배제농가": ""},
-    {"업체명": "예소야", "우선순위": 12, "목표두수": TARGET_COUNTS.get("예소야", 20), "지급률": "107.0%", "중량(kg)": "85~97", "등지방(mm)": "18~27", "등급": "1,1+,2", "암 비율": "50%", "배제농가": ""},
-    {"업체명": "미소", "우선순위": 13, "목표두수": TARGET_COUNTS.get("미소", 60), "지급률": "105.0%", "중량(kg)": "80~97", "등지방(mm)": "17~25", "등급": "1,1+", "암 비율": "60%", "배제농가": ""}
+    {"업체명": "염주골 1", "우선순위": 1, "목표두수": TARGET_COUNTS.get("염주골", 20), "지급률": "105.0%", "중량(kg)": "98~109", "등지방(mm)": "20~27", "등급": "2", "암 비율": "50%", "배제농가": ""},
+    {"업체명": "염주골 2", "우선순위": 2, "목표두수": 0, "지급률": "105.0%", "중량(kg)": "110~120", "등지방(mm)": "20~35", "등급": "2,등외", "암 비율": "50%", "배제농가": ""},
+    
+    {"업체명": "마루푸드", "우선순위": 3, "목표두수": TARGET_COUNTS.get("마루푸드", 15), "지급률": "105.0%", "중량(kg)": "82~105", "등지방(mm)": "29~35", "등급": "1,1+,2", "암 비율": "50%", "배제농가": ""},
+    {"업체명": "프라임미트", "우선순위": 4, "목표두수": TARGET_COUNTS.get("프라임미트", 110), "지급률": "104.5%", "중량(kg)": "80~103", "등지방(mm)": "20~34", "등급": "1,1+,2", "암 비율": "70%", "배제농가": ""},
+    
+    {"업체명": "흥부축산 1", "우선순위": 5, "목표두수": TARGET_COUNTS.get("흥부축산", 25), "지급률": "103.5%", "중량(kg)": "80~86", "등지방(mm)": "18~22", "등급": "1,1+", "암 비율": "60%", "배제농가": ""},
+    {"업체명": "흥부축산 2", "우선순위": 6, "목표두수": 0, "지급률": "103.5%", "중량(kg)": "75~79", "등지방(mm)": "18~24", "등급": "1,1+,2", "암 비율": "60%", "배제농가": ""},
+    
+    {"업체명": "자운", "우선순위": 7, "목표두수": TARGET_COUNTS.get("자운", 15), "지급률": "107.5%", "중량(kg)": "85~95", "등지방(mm)": "22~25", "등급": "1,1+", "암 비율": "100%", "배제농가": ""},
+    
+    {"업체명": "승민 1", "우선순위": 8, "목표두수": TARGET_COUNTS.get("승민", 5), "지급률": "107.5%", "중량(kg)": "84~88", "등지방(mm)": "20~22", "등급": "1,1+", "암 비율": "100%", "배제농가": ""},
+    {"업체명": "승민 2", "우선순위": 9, "목표두수": 0, "지급률": "107.5%", "중량(kg)": "80~83", "등지방(mm)": "18~25", "등급": "1,1+,2", "암 비율": "100%", "배제농가": ""},
+    
+    {"업체명": "제이이", "우선순위": 10, "목표두수": TARGET_COUNTS.get("제이이", 15), "지급률": "107.0%", "중량(kg)": "88~97", "등지방(mm)": "25~27", "등급": "1,1+", "암 비율": "50%", "배제농가": ""},
+    {"업체명": "돼랑이", "우선순위": 11, "목표두수": TARGET_COUNTS.get("돼랑이", 10), "지급률": "105.0%", "중량(kg)": "85~90", "등지방(mm)": "25~26", "등급": "1,1+", "암 비율": "50%", "배제농가": ""},
+    
+    {"업체명": "민강 1", "우선순위": 12, "목표두수": TARGET_COUNTS.get("민강", 60), "지급률": "107.0%", "중량(kg)": "85~97", "등지방(mm)": "21~25", "등급": "1,1+", "암 비율": "50%", "배제농가": ""},
+    {"업체명": "민강 2", "우선순위": 13, "목표두수": 0, "지급률": "107.0%", "중량(kg)": "83~84", "등지방(mm)": "18~25", "등급": "1,1+,2", "암 비율": "50%", "배제농가": ""},
+    
+    {"업체명": "대용식품", "우선순위": 14, "목표두수": TARGET_COUNTS.get("대용식품", 15), "지급률": "107.0%", "중량(kg)": "85~89", "등지방(mm)": "18~21", "등급": "1,1+", "암 비율": "60%", "배제농가": ""},
+    {"업체명": "명성", "우선순위": 15, "목표두수": TARGET_COUNTS.get("명성", 4), "지급률": "107.0%", "중량(kg)": "87~97", "등지방(mm)": "20~22", "등급": "1,1+", "암 비율": "80%", "배제농가": ""},
+    {"업체명": "예소야", "우선순위": 16, "목표두수": TARGET_COUNTS.get("예소야", 20), "지급률": "107.0%", "중량(kg)": "85~97", "등지방(mm)": "18~27", "등급": "1,1+,2", "암 비율": "50%", "배제농가": ""},
+    
+    {"업체명": "미소 1", "우선순위": 17, "목표두수": TARGET_COUNTS.get("미소", 60), "지급률": "105.0%", "중량(kg)": "85~97", "등지방(mm)": "17~25", "등급": "1,1+", "암 비율": "60%", "배제농가": ""},
+    {"업체명": "미소 2", "우선순위": 18, "목표두수": 0, "지급률": "105.0%", "중량(kg)": "80~84", "등지방(mm)": "18~25", "등급": "1,1+,2", "암 비율": "60%", "배제농가": ""},
+    {"업체명": "미소 3", "우선순위": 19, "목표두수": 0, "지급률": "105.0%", "중량(kg)": "84~97", "등지방(mm)": "15~16", "등급": "1,1+,2", "암 비율": "60%", "배제농가": ""}
 ]
 
+def parse_range(val_str, default_min=0.0, default_max=999.0):
+    if pd.isna(val_str) or val_str is None: return default_min, default_max
+    s = str(val_str).strip()
+    if s.lower() in ['none', 'nan', '', '-']: return default_min, default_max
+    if '~' in s:
+        parts = s.split('~')
+        try: return float(parts[0].strip()), float(parts[1].strip())
+        except ValueError: return default_min, default_max
+    else:
+        try:
+            v = float(s)
+            return v, v
+        except ValueError: return default_min, default_max
+
+def parse_ratio(f_ratio_str, default_ratio=0.5):
+    if pd.isna(f_ratio_str) or f_ratio_str is None: return default_ratio
+    s = str(f_ratio_str).strip()
+    if s.lower() in ['none', 'nan', '', '-']: return default_ratio
+    s = s.replace('%', '')
+    try:
+        val = float(s)
+        return val / 100.0 if val > 1.0 else val
+    except ValueError: return default_ratio
+
 def allocate_pigs_data(uploaded_file, current_spec_df=None):
-    """
-    엑셀 파일을 읽고 현재 스펙 테이블을 기반으로 돼지를 배정하는 핵심 연산 함수
-    """
     raw_df = pd.read_excel(uploaded_file, header=None)
     header_row_idx = 3
     for r_idx in range(min(10, len(raw_df))):
@@ -64,10 +99,8 @@ def allocate_pigs_data(uploaded_file, current_spec_df=None):
         for col in df_g.columns:
             col_clean = str(col).replace('\n', '').replace(' ', '')
             for p in possible_names:
-                if p in col_clean:
-                    return col
-        if df_g.shape[1] > default_idx:
-            return df_g.columns[default_idx]
+                if p in col_clean: return col
+        if df_g.shape[1] > default_idx: return df_g.columns[default_idx]
         return None
 
     col_pig_no = find_col(['도체번호', '도체'], 4)
@@ -110,8 +143,10 @@ def allocate_pigs_data(uploaded_file, current_spec_df=None):
     specs_dict = {}
     for idx, row in spec_data.iterrows():
         name = str(row['업체명']).strip()
-        prio = int(row['우선순위']) if pd.notna(row['우선순위']) else 99
-        base_target = int(row['목표두수']) if pd.notna(row['목표두수']) else 0
+        if not name or name.lower() in ['none', 'nan']: continue
+            
+        prio = int(row['우선순위']) if (pd.notna(row['우선순위']) and str(row['우선순위']).isdigit()) else 99
+        base_target = int(row['목표두수']) if (pd.notna(row['목표두수']) and str(row['목표두수']).isdigit()) else 0
         max_target = int(round(base_target * 1.10)) if base_target > 0 else 0
         
         weight_str = str(row['중량(kg)'])
@@ -120,15 +155,14 @@ def allocate_pigs_data(uploaded_file, current_spec_df=None):
         f_ratio_str = str(row['암 비율'])
         
         exclude_farms_str = str(row.get('배정농가', row.get('배제농가', '')))
-        exclude_farms = [f.strip() for f in exclude_farms_str.split(',') if f.strip() and f.strip() != 'nan']
+        exclude_farms = [f.strip() for f in exclude_farms_str.split(',') if f.strip() and f.strip().lower() not in ['nan', 'none']]
 
-        w_min, w_max = (map(float, weight_str.split('~')) if '~' in weight_str 
-                        else (float(weight_str), float(weight_str)) if weight_str!='nan' else (0, 999))
-        f_min, f_max = (map(float, fat_str.split('~')) if '~' in fat_str 
-                        else (float(fat_str), float(fat_str)) if fat_str!='nan' else (0, 999))
-        grades = [g.strip() for g in grade_str.split(',')] if grade_str != 'nan' else []
+        w_min, w_max = parse_range(weight_str, 0.0, 999.0)
+        f_min, f_max = parse_range(fat_str, 0.0, 999.0)
+        
+        grades = [g.strip() for g in grade_str.split(',') if g.strip() and g.strip().lower() not in ['nan', 'none']] if grade_str.lower() not in ['nan', 'none'] else []
 
-        f_ratio_val = float(f_ratio_str.replace('%', '')) / 100.0 if '%' in f_ratio_str else 0.5
+        f_ratio_val = parse_ratio(f_ratio_str, 0.5)
         c_ratio_val = 1.0 - f_ratio_val
 
         spec_obj = {
@@ -144,10 +178,11 @@ def allocate_pigs_data(uploaded_file, current_spec_df=None):
     specs.sort(key=lambda x: x['우선순위'])
     pigs['배정거래처'] = '미배정'
 
+    # 1차 배정: 스펙 순서대로 선배정
     for spec in specs:
         company = spec['업체명']
         target = spec['최대목표두수']
-        if target <= 0: continue
+        if target <= 0 and "2" not in company and "3" not in company: continue
 
         cond_base = (pigs['배정거래처'] == '미배정')
         if spec['배제농가']:
@@ -164,44 +199,51 @@ def allocate_pigs_data(uploaded_file, current_spec_df=None):
         matched_all = pigs[cond_spec]
 
         if not matched_all.empty:
-            target_f = int(round(target * spec['암비율_val']))
-            target_c = target - target_f
+            target_f = int(round(target * spec['암비율_val'])) if target > 0 else len(matched_all)
+            target_c = (target - target_f) if target > 0 else len(matched_all)
 
-            matched_f = matched_all[matched_all['성별'] == '암'].head(target_f)
-            matched_c = matched_all[matched_all['성별'] == '거세'].head(target_c)
+            matched_f = matched_all[matched_all['성별'] == '암'].head(max(0, target_f))
+            matched_c = matched_all[matched_all['성별'] == '거세'].head(max(0, target_c))
 
             pigs.loc[matched_f.index, '배정거래처'] = company
             pigs.loc[matched_c.index, '배정거래처'] = company
 
             curr_assigned = len(pigs[pigs['배정거래처'] == company])
-            if curr_assigned < target:
+            if target > 0 and curr_assigned < target:
                 needed = target - curr_assigned
                 rem_matched = pigs[cond_spec & (pigs['배정거래처'] == '미배정')].head(needed)
                 pigs.loc[rem_matched.index, '배정거래처'] = company
 
-        curr_assigned = len(pigs[pigs['배정거래처'] == company])
-        if curr_assigned < target:
-            needed = target - curr_assigned
-            candidates = pigs[cond_base & (pigs['배정거래처'] == '미배정')].copy()
-            if not candidates.empty:
-                w_diff = np.maximum(0, np.maximum(spec['w_min'] - candidates['중량'], candidates['중량'] - spec['w_max']))
-                f_diff = np.maximum(0, np.maximum(spec['f_min'] - candidates['등지방'], candidates['등지방'] - spec['f_max']))
-                candidates['score'] = w_diff * 1.5 + f_diff
-
-                matched_relaxed = candidates.sort_values('score').head(needed)
-                pigs.loc[matched_relaxed.index, '배정거래처'] = company
-
+    # 2차 배정: '잇다' 채널 배정 (100~110두 맞춤)
     unassigned_indices = pigs[pigs['배정거래처'] == '미배정'].index
-    ita_indices = unassigned_indices[:110]
+    unassigned_cnt = len(unassigned_indices)
+
+    if unassigned_cnt < 100:
+        needed_for_ita = 100 - unassigned_cnt
+        for spec in reversed(specs):
+            if needed_for_ita <= 0: break
+            comp = spec['업체명']
+            comp_indices = pigs[pigs['배정거래처'] == comp].index
+            if len(comp_indices) > 0:
+                take_cnt = min(needed_for_ita, len(comp_indices))
+                take_indices = comp_indices[-take_cnt:]
+                pigs.loc[take_indices, '배정거래처'] = '미배정'
+                needed_for_ita -= take_cnt
+
+        unassigned_indices = pigs[pigs['배정거래처'] == '미배정'].index
+
+    ita_count = min(110, max(100, len(unassigned_indices)))
+    ita_indices = unassigned_indices[:ita_count]
     pigs.loc[ita_indices, '배정거래처'] = '잇다'
 
-    over_indices = unassigned_indices[110:]
+    # 초과분 추가 흡수
+    over_indices = pigs[pigs['배정거래처'] == '미배정'].index
     if len(over_indices) > 0:
         yesoya_spec = specs_dict.get('예소야')
         if yesoya_spec:
             assign_yesoya = over_indices[:yesoya_spec['최대목표두수']]
             pigs.loc[assign_yesoya, '배정거래처'] = '예소야'
-            over_indices = over_indices[len(assign_yesoya):]
+            over_indices = pigs[pigs['배정거래처'] == '미배정'].index
 
         if len(over_indices) > 0:
             for spec in specs:
@@ -211,7 +253,7 @@ def allocate_pigs_data(uploaded_file, current_spec_df=None):
                 if rem_needed > 0:
                     assign_now = over_indices[:rem_needed]
                     pigs.loc[assign_now, '배정거래처'] = comp
-                    over_indices = over_indices[rem_needed:]
+                    over_indices = pigs[pigs['배정거래처'] == '미배정'].index
 
         pigs.loc[pigs['배정거래처'] == '미배정', '배정거래처'] = '잇다'
 
