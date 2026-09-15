@@ -1,7 +1,7 @@
 import streamlit as st
 
 # 🔒 비밀번호 설정
-APP_PASSWORD = "1234"
+APP_PASSWORD = "00885"
 
 def check_password():
     """엔터 키 지원 로그인 검증 함수"""
