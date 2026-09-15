@@ -15,7 +15,7 @@ except ImportError:
     DEFAULT_SPECS = []
     def allocate_pigs_data(file, specs): return pd.DataFrame(), {}
 
-# 로그인 통과 시 메인 화면
+# 로그인 검증
 if check_password():
 
     st.set_page_config(page_title="주식회사 잇다 / 자동 배정 및 농가 분석 시스템", layout="wide", page_icon="🐖")
@@ -42,9 +42,6 @@ if check_password():
         st.session_state["password_correct"] = False
         st.rerun()
 
-    if 'spec_df' not in st.session_state:
-        st.session_state.spec_df = pd.DataFrame(DEFAULT_SPECS)
-
     def get_centered_column_config(df):
         config = {}
         for col in df.columns:
@@ -58,36 +55,26 @@ if check_password():
                 config[col] = st.column_config.Column(col, alignment="center")
         return config
 
-    # 파일 업로드 시 연동 엔진(auto_allocator) 실행
+    # 파일 업로드 시 연동 엔진 실행 (백그라운드 스펙 반영)
     if uploaded_grade:
         try:
-            pigs, specs_dict = allocate_pigs_data(uploaded_grade, st.session_state.spec_df)
+            pigs, specs_dict = allocate_pigs_data(uploaded_grade, pd.DataFrame(DEFAULT_SPECS))
             st.session_state['allocated_pigs'] = pigs
             st.session_state['specs_dict'] = specs_dict
         except Exception as e:
             st.error(f"파일 처리 중 오류가 발생했습니다: {e}")
 
     # ==============================================================================
-    # [메뉴 1] 거래처 자동 배정 시스템
+    # [메뉴 1] 거래처 자동 배정 시스템 (스펙 관리 탭 삭제됨)
     # ==============================================================================
     if st.session_state.main_menu == "배정":
         st.title("🐖 주식회사 잇다 / 거래처 자동 배정 시스템")
 
-        tab1, tab2, tab3, tab4 = st.tabs(["⚙️ 거래처 스펙 관리", "🚀 자동 배정 실행", "🏢 거래처별 배정 상세", "🚚 잇다 배정"])
+        # 스펙 관리 탭 제거하고 3개 탭으로 구성
+        tab1, tab2, tab3 = st.tabs(["🚀 자동 배정 실행", "🏢 거래처별 배정 상세", "🚚 잇다 배정"])
 
+        # ----------------- 탭 1: 자동 배정 실행 -----------------
         with tab1:
-            st.subheader("⚙️ 거래처 스펙 관리")
-            edited_df = st.data_editor(
-                st.session_state.spec_df,
-                num_rows="dynamic",
-                use_container_width=True,
-                height=600,
-                key="spec_editor",
-                column_config=get_centered_column_config(st.session_state.spec_df)
-            )
-            st.session_state.spec_df = edited_df
-
-        with tab2:
             if 'allocated_pigs' in st.session_state:
                 pigs = st.session_state['allocated_pigs']
 
@@ -127,7 +114,8 @@ if check_password():
             else:
                 st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
 
-        with tab3:
+        # ----------------- 탭 2: 거래처별 배정 상세 -----------------
+        with tab2:
             st.subheader("🏢 거래처별 개별 배정 내역 및 명단")
             if 'allocated_pigs' in st.session_state and 'specs_dict' in st.session_state:
                 pigs_all = st.session_state['allocated_pigs']
@@ -198,7 +186,8 @@ if check_password():
             else:
                 st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
 
-        with tab4:
+        # ----------------- 탭 3: 잇다 배정 -----------------
+        with tab3:
             st.subheader("🚚 잇다 배정")
             if 'allocated_pigs' in st.session_state:
                 pigs_all = st.session_state['allocated_pigs']
