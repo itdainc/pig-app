@@ -15,33 +15,33 @@ try:
 except Exception:
     conn = None
 
-# 기본 스펙 불러오기
+# 이미지 표 기준 기본 스펙 데이터 설정 (배제농가 컬럼 추가)
+default_specs = [
+    {"업체명": "대용식품", "우선순위": 3, "목표두수": 15, "지급률": "107.0%", "중량(kg)": "85~90", "등지방(mm)": "18~21", "등급": "1,1+", "암 비율": "60%", "외관": "", "육질": "", "결함": "", "배제농가": ""},
+    {"업체명": "민강", "우선순위": 1, "목표두수": 60, "지급률": "107.0%", "중량(kg)": "85~97", "등지방(mm)": "21~25", "등급": "1,1+", "암 비율": "50%", "외관": "", "육질": "", "결함": "", "배제농가": ""},
+    {"업체명": "예소야", "우선순위": 3, "목표두수": 20, "지급률": "107.0%", "중량(kg)": "85~97", "등지방(mm)": "22~25", "등급": "1,1+", "암 비율": "60%", "외관": "", "육질": "", "결함": "", "배제농가": ""},
+    {"업체명": "승민", "우선순위": 2, "목표두수": 5, "지급률": "107.5%", "중량(kg)": "84~88", "등지방(mm)": "20", "등급": "1,1+", "암 비율": "100%", "외관": "", "육질": "", "결함": "", "배제농가": ""},
+    {"업체명": "자운", "우선순위": 2, "목표두수": 15, "지급률": "107.5%", "중량(kg)": "85~95", "등지방(mm)": "22~25", "등급": "1,1+", "암 비율": "100%", "외관": "", "육질": "", "결함": "", "배제농가": ""},
+    {"업체명": "제이이", "우선순위": 3, "목표두수": 15, "지급률": "107.0%", "중량(kg)": "88~97", "등지방(mm)": "25~27", "등급": "1,1+", "암 비율": "50%", "외관": "", "육질": "", "결함": "", "배제농가": ""},
+    {"업체명": "돼랑이", "우선순위": 99, "목표두수": 0, "지급률": "105.0%", "중량(kg)": "85~90", "등지방(mm)": "25~26", "등급": "1,1+", "암 비율": "50%", "외관": "", "육질": "", "결함": "", "배제농가": ""},
+    {"업체명": "명성", "우선순위": 3, "목표두수": 4, "지급률": "107.0%", "중량(kg)": "87~97", "등지방(mm)": "20~22", "등급": "1,1+", "암 비율": "80%", "외관": "", "육질": "", "결함": "", "배제농가": ""},
+    {"업체명": "염주골", "우선순위": 5, "목표두수": 20, "지급률": "105.0%", "중량(kg)": "98~109", "등지방(mm)": "20~27", "등급": "2", "암 비율": "50%", "외관": "", "육질": "", "결함": "", "배제농가": ""},
+    {"업체명": "흥부축산", "우선순위": 5, "목표두수": 25, "지급률": "103.5%", "중량(kg)": "75~86", "등지방(mm)": "18~22", "등급": "1,1+,2", "암 비율": "60%", "외관": "", "육질": "", "결함": "", "배제농가": ""},
+    {"업체명": "미소", "우선순위": 4, "목표두수": 60, "지급률": "105.0%", "중량(kg)": "80~97", "등지방(mm)": "17~25", "등급": "1,1+", "암 비율": "60%", "외관": "", "육질": "", "결함": "", "배제농가": ""},
+    {"업체명": "프라임미트", "우선순위": 4, "목표두수": 110, "지급률": "104.5%", "중량(kg)": "80~103", "등지방(mm)": "20~34", "등급": "1,1+,2", "암 비율": "70%", "외관": "", "육질": "", "결함": "", "배제농가": ""}
+]
+
 try:
     if conn:
         spec_df = conn.read(worksheet="스펙", ttl="1m")
     else:
         raise Exception("연동 미설정")
 except Exception:
-    default_specs = [
-        {"업체명": "대용식품", "중량(kg)": "85~90", "등지방(mm)": "18~21", "등급": "1,1+", "거세": 6, "암": 4},
-        {"업체명": "민강", "중량(kg)": "85~97", "등지방(mm)": "21~25", "등급": "1,1+", "거세": 5, "암": 5},
-        {"업체명": "예소야", "중량(kg)": "85~97", "등지방(mm)": "22~25", "등급": "1,1+", "거세": 6, "암": 4},
-        {"업체명": "승민", "중량(kg)": "84~88", "등지방(mm)": "20", "등급": "1,1+", "거세": 0, "암": 10},
-        {"업체명": "자운", "중량(kg)": "85~95", "등지방(mm)": "22~25", "등급": "1,1+", "거세": 0, "암": 10},
-        {"업체명": "제이이", "중량(kg)": "88~97", "등지방(mm)": "25~27", "등급": "1,1+", "거세": 5, "암": 5},
-        {"업체명": "돼랑이", "중량(kg)": "85~90", "등지방(mm)": "25~26", "등급": "1,1+", "거세": 5, "암": 5},
-        {"업체명": "명성", "중량(kg)": "87~97", "등지방(mm)": "20~22", "등급": "1,1+", "거세": 8, "암": 2},
-        {"업체명": "염주골", "중량(kg)": "98~109", "등지방(mm)": "20~27", "등급": "2", "거세": 5, "암": 5},
-        {"업체명": "흥부축산", "중량(kg)": "75~86", "등지방(mm)": "18~22", "등급": "1,1+,2", "거세": 6, "암": 4},
-        {"업체명": "미소", "중량(kg)": "80~97", "등지방(mm)": "17~25", "등급": "1,1+", "거세": 6, "암": 4},
-        {"업체명": "프라임미트", "중량(kg)": "80~103", "등지방(mm)": "20~34", "등급": "1,1+,2", "거세": 7, "암": 3},
-    ]
     spec_df = pd.DataFrame(default_specs)
 
 if 'spec_df' not in st.session_state:
     st.session_state.spec_df = spec_df
 
-# 가운데 정렬 column_config 설정
 def get_centered_column_config(df):
     config = {}
     for col in df.columns:
@@ -51,40 +51,38 @@ def get_centered_column_config(df):
         )
     return config
 
-# ----------------- 탭 구성 (요청: 거래처 스펙 관리를 맨 앞으로 이동) -----------------
+# ----------------- 탭 구성 -----------------
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "⚙️ 거래처 스펙 관리", 
     "🚀 자동 배정 실행", 
     "🏢 거래처별 배정 상세",
     "📅 배정 이력 조회 (구글 시트)",
-    "🚚 전남지사 배정 (잇다)"
+    "🚚 잇다 배정"
 ])
 
-# ----------------- 탭 1: 거래처 스펙 관리 (맨 앞으로 이동) -----------------
+# ----------------- 탭 1: 거래처 스펙 관리 -----------------
 with tab1:
-    st.subheader("⚙️ 등록된 거래처 스펙 수정 및 추가 (구글 시트 연동)")
-    st.write("표 안의 셀을 클릭하여 숫자를 수정하거나 항목을 추가/삭제할 수 있습니다.")
+    st.subheader("⚙️ 거래처 스펙 관리 (우선순위 / 목표두수 / 배제농가 설정)")
+    st.write("표 안의 셀을 클릭하여 숫자를 수정하거나 항목을 추가/삭제할 수 있습니다. (우선순위 숫자가 작을수록 먼저 배정됩니다)")
 
-    col_spec, _ = st.columns([3, 2])
-    with col_spec:
-        edited_df = st.data_editor(
-            st.session_state.spec_df,
-            num_rows="dynamic",
-            use_container_width=True,
-            height=600,
-            key="spec_editor"
-        )
+    edited_df = st.data_editor(
+        st.session_state.spec_df,
+        num_rows="dynamic",
+        use_container_width=True,
+        height=600,
+        key="spec_editor"
+    )
 
-        if st.button("💾 구글 시트에 스펙 변경사항 저장", type="primary"):
-            try:
-                if conn is None:
-                    raise Exception("Secrets 필요")
-                conn.update(worksheet="스펙", data=edited_df)
-                st.session_state.spec_df = edited_df
-                st.success("거래처 스펙 변경 사항이 구글 시트 ['스펙'] 탭에 성공적으로 동기화되었습니다!")
-            except Exception:
-                st.session_state.spec_df = edited_df
-                st.success("스펙이 임시 반영되었습니다.")
+    if st.button("💾 구글 시트에 스펙 변경사항 저장", type="primary"):
+        try:
+            if conn is None:
+                raise Exception("Secrets 필요")
+            conn.update(worksheet="스펙", data=edited_df)
+            st.session_state.spec_df = edited_df
+            st.success("거래처 스펙 변경 사항이 구글 시트 ['스펙'] 탭에 성공적으로 동기화되었습니다!")
+        except Exception:
+            st.session_state.spec_df = edited_df
+            st.success("스펙이 임시 반영되었습니다.")
 
 # ----------------- 탭 2: 자동 배정 실행 -----------------
 with tab2:
@@ -101,8 +99,8 @@ with tab2:
                 '중량': pd.to_numeric(df_g.iloc[:, 8], errors='coerce'),
                 '등지방': pd.to_numeric(df_g.iloc[:, 9], errors='coerce'),
                 '등급': df_g.iloc[:, 22].astype(str),
-                '출하농가': '',
-                '이력번호': ''
+                '출하농가': df_g.iloc[:, 21].astype(str) if df_g.shape[1] > 21 else '',
+                '이력번호': df_g.iloc[:, 24].astype(str) if df_g.shape[1] > 24 else ''
             }).dropna(subset=['중량']).copy()
 
             pigs.reset_index(drop=True, inplace=True)
@@ -111,10 +109,18 @@ with tab2:
             specs = []
             specs_dict = {}
             for idx, row in st.session_state.spec_df.iterrows():
-                name = str(row['업체명'])
+                name = str(row['업체명']).strip()
+                prio = int(row['우선순위']) if pd.notna(row['우선순위']) else 99
+                target_cnt = int(row['목표두수']) if pd.notna(row['목표두수']) else 0
+                
                 weight_str = str(row['중량(kg)'])
                 fat_str = str(row['등지방(mm)'])
                 grade_str = str(row['등급'])
+                f_ratio_str = str(row['암 비율'])
+                
+                # 배제농가 파싱
+                exclude_farms_str = str(row.get('배정농가', row.get('배제농가', '')))
+                exclude_farms = [f.strip() for f in exclude_farms_str.split(',') if f.strip() and f.strip() != 'nan']
 
                 w_min, w_max = (map(float, weight_str.split('~')) if '~' in weight_str 
                                 else (float(weight_str), float(weight_str)) if weight_str!='nan' else (0, 999))
@@ -122,66 +128,83 @@ with tab2:
                                 else (float(fat_str), float(fat_str)) if fat_str!='nan' else (0, 999))
                 grades = [g.strip() for g in grade_str.split(',')] if grade_str != 'nan' else []
 
-                c_cnt = float(row['거세']) if pd.notna(row['거세']) else 0.0
-                f_cnt = float(row['암']) if pd.notna(row['암']) else 0.0
-                total_ratio = c_cnt + f_cnt
-                
-                c_ratio = (c_cnt / total_ratio) if total_ratio > 0 else 0.5
-                f_ratio = (f_cnt / total_ratio) if total_ratio > 0 else 0.5
+                # 암 비율 계산
+                f_ratio_val = float(f_ratio_str.replace('%', '')) / 100.0 if '%' in f_ratio_str else 0.5
+                c_ratio_val = 1.0 - f_ratio_val
 
                 spec_obj = {
-                    '업체명': name, 'w_min': w_min, 'w_max': w_max,
+                    '업체명': name, '우선순위': prio, '목표두수': target_cnt,
+                    'w_min': w_min, 'w_max': w_max,
                     'f_min': f_min, 'f_max': f_max, 'grades': grades,
-                    '거세비율': c_ratio, '암비율': f_ratio,
+                    '암비율_val': f_ratio_val, '거세비율_val': c_ratio_val,
                     'weight_str': weight_str, 'fat_str': fat_str, 'grade_str': grade_str,
-                    'c_cnt': int(c_cnt), 'f_cnt': int(f_cnt)
+                    'f_ratio_str': f_ratio_str, '배제농가': exclude_farms
                 }
                 specs.append(spec_obj)
                 specs_dict[name] = spec_obj
 
+            # 우선순위 순 정렬 (숫자 작은 것이 1순위)
+            specs.sort(key=lambda x: x['우선순위'])
+
             pigs['배정거래처'] = '미배정'
 
-            # ----------------- 비율 기반 배정 로직 -----------------
+            # ----------------- 우선순위 & 목표두수 & 배제농가 기반 선배정 로직 -----------------
             for spec in specs:
                 company = spec['업체명']
-                
-                cond_base = (
-                    (pigs['배정거래처'] == '미배정') &
+                target = spec['목표두수']
+                if target <= 0:
+                    continue
+
+                # 1) 배제농가 조건 적용
+                cond_base = (pigs['배정거래처'] == '미배정')
+                if spec['배제농가']:
+                    for farm in spec['배제농가']:
+                        cond_base &= (~pigs['출하농가'].str.contains(farm, na=False))
+
+                # 2) 스펙 매칭 (중량, 등지방, 등급)
+                cond_spec = cond_base & (
                     (pigs['중량'] >= spec['w_min']) & (pigs['중량'] <= spec['w_max']) &
                     (pigs['등지방'] >= spec['f_min']) & (pigs['등지방'] <= spec['f_max'])
                 )
                 if spec['grades']:
-                    cond_base &= (pigs['등급'].isin(spec['grades']))
+                    cond_spec &= (pigs['등급'].isin(spec['grades']))
 
-                matched_all = pigs[cond_base]
+                matched_all = pigs[cond_spec]
+
+                # 3) 암/거세 비율에 따른 목표두수 분할 배정
                 if not matched_all.empty:
-                    matched_c = matched_all[matched_all['성별'] == '거세']
-                    matched_f = matched_all[matched_all['성별'] == '암']
+                    target_f = int(round(target * spec['암비율_val']))
+                    target_c = target - target_f
 
-                    if spec['거세비율'] == 0:
-                        pigs.loc[matched_f.index, '배정거래처'] = company
-                    elif spec['암비율'] == 0:
-                        pigs.loc[matched_c.index, '배정거래처'] = company
-                    else:
-                        pigs.loc[matched_c.index, '배정거래처'] = company
-                        pigs.loc[matched_f.index, '배정거래처'] = company
+                    matched_f = matched_all[matched_all['성별'] == '암'].head(target_f)
+                    matched_c = matched_all[matched_all['성별'] == '거세'].head(target_c)
 
-            for spec in specs:
-                unassigned_cnt = len(pigs[pigs['배정거래처'] == '미배정'])
-                if unassigned_cnt <= 105:
-                    break
+                    pigs.loc[matched_f.index, '배정거래처'] = company
+                    pigs.loc[matched_c.index, '배정거래처'] = company
 
-                candidates = pigs[pigs['배정거래처'] == '미배정'].copy()
-                if not candidates.empty:
-                    w_diff = np.maximum(0, np.maximum(spec['w_min'] - candidates['중량'], candidates['중량'] - spec['w_max']))
-                    f_diff = np.maximum(0, np.maximum(spec['f_min'] - candidates['등지방'], candidates['등지방'] - spec['f_max']))
-                    candidates['score'] = w_diff * 1.5 + f_diff
+                    # 비율 매칭 후 부족한 수량은 성별 상관없이 동일 스펙에서 추가 충원
+                    curr_assigned = len(pigs[pigs['배정거래처'] == company])
+                    if curr_assigned < target:
+                        needed = target - curr_assigned
+                        rem_matched = pigs[cond_spec & (pigs['배정거래처'] == '미배정')].head(needed)
+                        pigs.loc[rem_matched.index, '배정거래처'] = company
 
-                    matched_relaxed = candidates.sort_values('score').head(15)
-                    pigs.loc[matched_relaxed.index, '배정거래처'] = spec['업체명']
+                # 4) 만약 100% 스펙 완벽 매칭으로 목표두수를 못 채운 경우 스펙 유연 완화 매칭
+                curr_assigned = len(pigs[pigs['배정거래처'] == company])
+                if curr_assigned < target:
+                    needed = target - curr_assigned
+                    candidates = pigs[cond_base & (pigs['배정거래처'] == '미배정')].copy()
+                    if not candidates.empty:
+                        w_diff = np.maximum(0, np.maximum(spec['w_min'] - candidates['중량'], candidates['중량'] - spec['w_max']))
+                        f_diff = np.maximum(0, np.maximum(spec['f_min'] - candidates['등지방'], candidates['등지방'] - spec['f_max']))
+                        candidates['score'] = w_diff * 1.5 + f_diff
 
+                        matched_relaxed = candidates.sort_values('score').head(needed)
+                        pigs.loc[matched_relaxed.index, '배정거래처'] = company
+
+            # 모든 우선순위 배정 완료 후 남은 돼지는 전부 '잇다'로 할당
             unassigned_mask = pigs['배정거래처'] == '미배정'
-            pigs.loc[unassigned_mask, '배정거래처'] = '전남지사(잇다)'
+            pigs.loc[unassigned_mask, '배정거래처'] = '잇다'
 
             st.session_state['allocated_pigs'] = pigs
             st.session_state['specs_dict'] = specs_dict
@@ -206,13 +229,13 @@ with tab2:
 
             # ----------------- 상단 지표 -----------------
             total_pigs = len(pigs)
-            assigned_pigs = len(pigs[pigs['배정거래처'] != '전남지사(잇다)'])
-            jn_pigs = len(pigs[pigs['배정거래처'] == '전남지사(잇다)'])
+            assigned_pigs = len(pigs[pigs['배정거래처'] != '잇다'])
+            jn_pigs = len(pigs[pigs['배정거래처'] == '잇다'])
 
             c1, c2, c3 = st.columns(3)
             c1.metric("총 도축 수량", f"{total_pigs} 두")
             c2.metric("일반 거래처 배정 수량", f"{assigned_pigs} 두")
-            c3.metric("전남지사 배정 수량", f"{jn_pigs} 두")
+            c3.metric("잇다 잔여 할당 수량", f"{jn_pigs} 두")
 
             st.markdown("---")
             
@@ -268,7 +291,7 @@ with tab3:
         pigs_all = st.session_state['allocated_pigs']
         specs_dict = st.session_state['specs_dict']
         
-        company_list = sorted([c for c in pigs_all['배정거래처'].unique() if c != '전남지사(잇다)'])
+        company_list = sorted([c for c in pigs_all['배정거래처'].unique() if c != '잇다'])
         
         if company_list:
             if 'selected_company' not in st.session_state or st.session_state.selected_company not in company_list:
@@ -294,10 +317,10 @@ with tab3:
                 selected_company = st.session_state.selected_company
                 st.markdown(f"### **[{selected_company}] 배정 명단**")
 
-                # 스펙 정보 상단 안내 박스
                 spec = specs_dict.get(selected_company, None)
                 if spec:
-                    st.info(f"🎯 **[{selected_company}] 설정 스펙** ➔ **중량:** {spec['weight_str']} kg | **등지방:** {spec['fat_str']} mm | **등급:** {spec['grade_str']} | **목표 비율(거세:암):** {spec['c_cnt']} : {spec['f_cnt']}")
+                    ex_farm_info = f" | **배제농가:** {', '.join(spec['배제농가'])}" if spec['배제농가'] else ""
+                    st.info(f"🎯 **[{selected_company}] 설정 스펙** ➔ **우선순위:** {spec['우선순위']}위 | **목표두수:** {spec['목표두수']}두 | **중량:** {spec['weight_str']} kg | **등지방:** {spec['fat_str']} mm | **등급:** {spec['grade_str']} | **암 비율:** {spec['f_ratio_str']}{ex_farm_info}")
 
                 comp_df = pigs_all[pigs_all['배정거래처'] == selected_company].copy()
                 comp_df.reset_index(drop=True, inplace=True)
@@ -327,6 +350,9 @@ with tab3:
                     if spec['grades'] and str(row['등급']).strip() not in spec['grades']:
                         diffs.append(f"등급불일치({row['등급']})")
                     
+                    if spec['배제농가'] and any(farm in str(row['출하농가']) for farm in spec['배제농가']):
+                        diffs.append(f"배제농가포함({row['출하농가']})")
+
                     remarks.append(", ".join(diffs) if diffs else "스펙일치")
 
                 comp_df['비고'] = remarks
@@ -413,13 +439,13 @@ with tab4:
     except Exception:
         st.info("💡 구글 시트 연동 완료 시 날짜별 이력 조회가 가능합니다.")
 
-# ----------------- 탭 5: 전남지사 배정 (잇다) -----------------
+# ----------------- 탭 5: 잇다 배정 -----------------
 with tab5:
-    st.subheader("🚚 전남지사(잇다) 전달용 표 및 엑셀 다운로드")
+    st.subheader("🚚 잇다 전달용 표 및 엑셀 다운로드")
     
     if 'allocated_pigs' in st.session_state:
         pigs_all = st.session_state['allocated_pigs']
-        jn_df = pigs_all[pigs_all['배정거래처'] == '전남지사(잇다)'].copy()
+        jn_df = pigs_all[pigs_all['배정거래처'] == '잇다'].copy()
         
         if not jn_df.empty:
             jn_df.reset_index(drop=True, inplace=True)
@@ -428,7 +454,7 @@ with tab5:
             total_jn_count = len(jn_df)
             total_jn_weight = jn_df['중량'].sum()
 
-            st.success(f"📌 **전남지사 전달 총 수량:** {total_jn_count}두 / **총 중량:** {total_jn_weight:,.1f} kg")
+            st.success(f"📌 **잇다 전달 총 수량:** {total_jn_count}두 / **총 중량:** {total_jn_weight:,.1f} kg")
 
             jn_export = pd.DataFrame({
                 'No.': jn_df.index,
@@ -441,8 +467,8 @@ with tab5:
                 '도체중(kg)': jn_df['중량'],
                 '등지방두께': jn_df['등지방'],
                 '최종등급': jn_df['등급'],
-                '출하농가': '',
-                '이력번호': '',
+                '출하농가': jn_df['출하농가'],
+                '이력번호': jn_df['이력번호'],
                 '거래처': '잇다'
             })
 
@@ -453,7 +479,7 @@ with tab5:
 
             today_str = datetime.now().strftime("%m%d")
             st.download_button(
-                label=f"📥 전남지사 전달용 엑셀 다운로드 ({today_str} 잇다.xlsx)",
+                label=f"📥 잇다 전달용 엑셀 다운로드 ({today_str} 잇다.xlsx)",
                 data=jn_data,
                 file_name=f"{today_str} 잇다.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -471,6 +497,6 @@ with tab5:
                 )
 
         else:
-            st.warning("전남지사로 할당된 물량이 없습니다.")
+            st.warning("잇다 채널로 할당된 물량이 없습니다.")
     else:
         st.info("👈 [🚀 자동 배정 실행] 탭에서 등급판정 파일을 먼저 업로드해 주세요.")
