@@ -41,12 +41,12 @@ except Exception:
 if 'spec_df' not in st.session_state:
     st.session_state.spec_df = spec_df
 
-# ----------------- 탭 구성 -----------------
+# ----------------- 탭 구성 (요청 5번 반영) -----------------
 tab1, tab2, tab3, tab4 = st.tabs([
     "🚀 자동 배정 실행", 
-    "🚚 전남지사 배정 (잇다)", 
     "⚙️ 거래처 스펙 관리", 
-    "📅 배정 이력 조회 (구글 시트)"
+    "📅 배정 이력 조회 (구글 시트)",
+    "🚚 전남지사 배정 (잇다)"
 ])
 
 # ----------------- 탭 1: 자동 배정 -----------------
@@ -58,7 +58,6 @@ with tab1:
         try:
             df_g = pd.read_excel(uploaded_grade, header=3)
             
-            # 컬럼 자동 파악 및 추출 (도체번호, 성별, 중량, 등지방, 등급, 이력번호, 출하농가)
             pigs = pd.DataFrame({
                 '도체번호': df_g.iloc[:, 4],
                 '성별': df_g.iloc[:, 7],
@@ -91,13 +90,13 @@ with tab1:
                 specs.append({
                     '업체명': name, 'w_min': w_min, 'w_max': w_max,
                     'f_min': f_min, 'f_max': f_max, 'grades': grades,
-                    '거세수량': c_cnt, '암수량': f_cnt
+                    '거세수량': c_cnt, '암수량': f_cnt, '총필요수량': c_cnt + f_cnt
                 })
 
             pigs['배정거래처'] = '미배정'
 
-            # 1차 배정: 100% 조건 엄격 매칭
-            remaining_req = []
+            # ----------------- 알고리즘 개선 (요청 4번: 중량/등지방/등급 1순위, 성별 2순위) -----------------
+            # 1단계: 중량 + 등지방 + 등급 100% 매칭 (성별 비율 정확 매칭 우선)
             for spec in specs:
                 company = spec['업체명']
                 for sex, req_cnt in [('거세', spec['거세수량']), ('암', spec['암수량'])]:
@@ -114,74 +113,71 @@ with tab1:
                     
                     matched = pigs[cond].head(req_cnt)
                     pigs.loc[matched.index, '배정거래처'] = company
-                    
-                    assigned_cnt = len(matched)
-                    if assigned_cnt < req_cnt:
-                        remaining_req.append({
-                            'company': company, 'sex': sex, 'needed': req_cnt - assigned_cnt,
-                            'spec': spec
-                        })
 
-            # 2차 배정: 오차 최소화 완화 매칭
-            still_remaining = []
-            for req in remaining_req:
-                company = req['company']
-                sex = req['sex']
-                needed = req['needed']
-                spec = req['spec']
+            # 2단계: 중량 + 등지방 + 등급 100% 매칭 중 성별 불문 부족 수량 채우기 (스펙 중심 최고 우선순위)
+            for spec in specs:
+                company = spec['업체명']
+                current_assigned = len(pigs[pigs['배정거래처'] == company])
+                needed = spec['총필요수량'] - current_assigned
 
-                cond_unassigned = (pigs['배정거래처'] == '미배정') & (pigs['성별'] == sex)
-                candidates = pigs[cond_unassigned].copy()
-                
-                if not candidates.empty:
-                    w_diff = np.maximum(0, np.maximum(spec['w_min'] - candidates['중량'], candidates['중량'] - spec['w_max']))
-                    f_diff = np.maximum(0, np.maximum(spec['f_min'] - candidates['등지방'], candidates['등지방'] - spec['f_max']))
-                    candidates['score'] = w_diff * 1.5 + f_diff
+                if needed > 0:
+                    cond = (
+                        (pigs['배정거래처'] == '미배정') &
+                        (pigs['중량'] >= spec['w_min']) & (pigs['중량'] <= spec['w_max']) &
+                        (pigs['등지방'] >= spec['f_min']) & (pigs['등지방'] <= spec['f_max'])
+                    )
+                    if spec['grades']:
+                        cond &= (pigs['등급'].isin(spec['grades']))
 
-                    matched_relaxed = candidates.sort_values('score').head(needed)
-                    pigs.loc[matched_relaxed.index, '배정거래처'] = company
-                    
-                    assigned_cnt = len(matched_relaxed)
-                    if assigned_cnt < needed:
-                        still_remaining.append({'company': company, 'needed': needed - assigned_cnt, 'spec': spec})
-                else:
-                    still_remaining.append({'company': company, 'needed': needed, 'spec': spec})
+                    matched = pigs[cond].head(needed)
+                    pigs.loc[matched.index, '배정거래처'] = company
 
-            # 3차 배정: 잔여 수량 강제 충원
-            for req in still_remaining:
-                company = req['company']
-                needed = req['needed']
-                spec = req['spec']
+            # 3단계: 스펙 오차 최소화 충원 (성별 불문 오차 적은순 배정)
+            for spec in specs:
+                company = spec['업체명']
+                current_assigned = len(pigs[pigs['배정거래처'] == company])
+                needed = spec['총필요수량'] - current_assigned
 
-                candidates = pigs[pigs['배정거래처'] == '미배정'].copy()
-                if not candidates.empty:
-                    w_diff = np.maximum(0, np.maximum(spec['w_min'] - candidates['중량'], candidates['중량'] - spec['w_max']))
-                    f_diff = np.maximum(0, np.maximum(spec['f_min'] - candidates['등지방'], candidates['등지방'] - spec['f_max']))
-                    candidates['score'] = w_diff * 1.5 + f_diff
+                if needed > 0:
+                    candidates = pigs[pigs['배정거래처'] == '미배정'].copy()
+                    if not candidates.empty:
+                        w_diff = np.maximum(0, np.maximum(spec['w_min'] - candidates['중량'], candidates['중량'] - spec['w_max']))
+                        f_diff = np.maximum(0, np.maximum(spec['f_min'] - candidates['등지방'], candidates['등지방'] - spec['f_max']))
+                        candidates['score'] = w_diff * 1.5 + f_diff
 
-                    matched_final = candidates.sort_values('score').head(needed)
-                    pigs.loc[matched_final.index, '배정거래처'] = company
+                        matched_final = candidates.sort_values('score').head(needed)
+                        pigs.loc[matched_final.index, '배정거래처'] = company
 
-            # 전남지사(잇다) 물량 구분 처리 (미배정돼지 -> 전남지사 물량으로 할당)
+            # 남아있는 미배정 돼지를 전남지사(잇다)로 할당
             unassigned_mask = pigs['배정거래처'] == '미배정'
             pigs.loc[unassigned_mask, '배정거래처'] = '전남지사(잇다)'
 
             st.session_state['allocated_pigs'] = pigs
 
-            summary = pigs[pigs['배정거래처'] != '전남지사(잇다)'].groupby(['배정거래처', '성별']).size().unstack(fill_value=0)
+            # ----------------- 좌측 배정요약 표 개선 (요청 1번 & 2번) -----------------
+            summary = pigs.groupby(['배정거래처', '성별']).size().unstack(fill_value=0)
+            if '거세' not in summary.columns: summary['거세'] = 0
+            if '암' not in summary.columns: summary['암'] = 0
+            
+            summary = summary[['거세', '암']]
+            summary['합계'] = summary['거세'] + summary['암']
+            
+            # 컬럼명 영어 및 포맷 정리
+            summary.columns.name = None
 
             st.sidebar.markdown("---")
-            st.sidebar.subheader("📊 일반 거래처 배정 요약")
-            st.sidebar.dataframe(summary, use_container_width=True, height=450)
+            st.sidebar.subheader("📊 거래처별 배정 요약")
+            st.sidebar.dataframe(summary, use_container_width=True, height=500)
 
+            # ----------------- 상단 지표 개선 (요청 3번) -----------------
             total_pigs = len(pigs)
             assigned_pigs = len(pigs[pigs['배정거래처'] != '전남지사(잇다)'])
             jn_pigs = len(pigs[pigs['배정거래처'] == '전남지사(잇다)'])
 
             c1, c2, c3 = st.columns(3)
             c1.metric("총 도축 수량", f"{total_pigs} 두")
-            c2.metric("일반 거래처 배정", f"{assigned_pigs} 두")
-            c3.metric("전남지사(잇다) 할당 수량", f"{jn_pigs} 두")
+            c2.metric("일반 거래처 배정 수량", f"{assigned_pigs} 두")
+            c3.metric("전남지사 배정 수량", f"{jn_pigs} 두")
 
             st.markdown("---")
             
@@ -223,65 +219,8 @@ with tab1:
     else:
         st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]만 올려주시면 바로 배정됩니다.")
 
-# ----------------- 탭 2: 전남지사 배정 (잇다) -----------------
+# ----------------- 탭 2: 거래처 스펙 관리 (요청 5번 반영) -----------------
 with tab2:
-    st.subheader("🚚 전남지사(잇다) 전달용 표 및 엑셀 다운로드")
-    
-    if 'allocated_pigs' in st.session_state:
-        pigs_all = st.session_state['allocated_pigs']
-        jn_df = pigs_all[pigs_all['배정거래처'] == '전남지사(잇다)'].copy()
-        
-        if not jn_df.empty:
-            jn_df.reset_index(drop=True, inplace=True)
-            jn_df.index = jn_df.index + 1
-            
-            total_jn_count = len(jn_df)
-            total_jn_weight = jn_df['중량'].sum()
-
-            st.success(f"📌 **전남지사 전달 총 수량:** {total_jn_count}두 / **총 중량:** {total_jn_weight:,.1f} kg")
-
-            # 전남지사 규격 양식 DataFrame 생성
-            jn_export = pd.DataFrame({
-                'No.': jn_df.index,
-                '작업장명': '나주농협',
-                '판정일': datetime.now().day,
-                '도체번호': jn_df['도체번호'],
-                '판정방법': '온',
-                '도체형태': '탕박',
-                '성별': jn_df['성별'],
-                '도체중(kg)': jn_df['중량'],
-                '등지방두께': jn_df['등지방'],
-                '최종등급': jn_df['등급'],
-                '출하농가': jn_df['출하농가'],
-                '이력번호': jn_df['이력번호'],
-                '거래처': '잇다'
-            })
-
-            # 전남지사 엑셀 다운로드 버튼
-            output_jn = io.BytesIO()
-            with pd.ExcelWriter(output_jn, engine='openpyxl') as writer:
-                jn_export.to_excel(writer, sheet_name='잇다', index=False)
-            jn_data = output_jn.getvalue()
-
-            today_str = datetime.now().strftime("%m%d")
-            st.download_button(
-                label=f"📥 전남지사 전달용 엑셀 다운로드 ({today_str} 잇다.xlsx)",
-                data=jn_data,
-                file_name=f"{today_str} 잇다.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="primary"
-            )
-
-            st.markdown("---")
-            st.dataframe(jn_export, height=750, use_container_width=True)
-
-        else:
-            st.warning("전남지사로 할당된 물량이 없습니다.")
-    else:
-        st.info("👈 [🚀 자동 배정 실행] 탭에서 등급판정 파일을 먼저 업로드해 주세요.")
-
-# ----------------- 탭 3: 거래처 스펙 관리 -----------------
-with tab3:
     st.subheader("⚙️ 등록된 거래처 스펙 수정 및 추가 (구글 시트 연동)")
     st.write("표 안의 셀을 클릭하여 숫자를 수정하거나 항목을 추가/삭제할 수 있습니다.")
 
@@ -306,8 +245,8 @@ with tab3:
                 st.session_state.spec_df = edited_df
                 st.success("스펙이 임시 반영되었습니다.")
 
-# ----------------- 탭 4: 배정 이력 조회 -----------------
-with tab4:
+# ----------------- 탭 3: 배정 이력 조회 (요청 5번 반영) -----------------
+with tab3:
     st.subheader("📅 구글 시트 날짜별(탭별) 배정 이력 조회")
     try:
         if conn is None:
@@ -323,7 +262,7 @@ with tab4:
                     st.warning(f"[{target_tab}] 탭은 존재하지만 데이터가 없습니다.")
                 else:
                     st.write(f"### 📌 {target_tab} 배정 이력")
-                    summary_hist = hist_df[hist_df['배정거래처'] != '전남지사(잇다)'].groupby(['배정거래처', '성별']).size().unstack(fill_value=0)
+                    summary_hist = hist_df.groupby(['배정거래처', '성별']).size().unstack(fill_value=0)
                     
                     c1, c2 = st.columns([1, 2])
                     with c1:
@@ -337,3 +276,58 @@ with tab4:
 
     except Exception:
         st.info("💡 구글 시트 연동 완료 시 날짜별 이력 조회가 가능합니다.")
+
+# ----------------- 탭 4: 전남지사 배정 (잇다) (요청 5번 반영) -----------------
+with tab4:
+    st.subheader("🚚 전남지사(잇다) 전달용 표 및 엑셀 다운로드")
+    
+    if 'allocated_pigs' in st.session_state:
+        pigs_all = st.session_state['allocated_pigs']
+        jn_df = pigs_all[pigs_all['배정거래처'] == '전남지사(잇다)'].copy()
+        
+        if not jn_df.empty:
+            jn_df.reset_index(drop=True, inplace=True)
+            jn_df.index = jn_df.index + 1
+            
+            total_jn_count = len(jn_df)
+            total_jn_weight = jn_df['중량'].sum()
+
+            st.success(f"📌 **전남지사 전달 총 수량:** {total_jn_count}두 / **총 중량:** {total_jn_weight:,.1f} kg")
+
+            jn_export = pd.DataFrame({
+                'No.': jn_df.index,
+                '작업장명': '나주농협',
+                '판정일': datetime.now().day,
+                '도체번호': jn_df['도체번호'],
+                '판정방법': '온',
+                '도체형태': '탕박',
+                '성별': jn_df['성별'],
+                '도체중(kg)': jn_df['중량'],
+                '등지방두께': jn_df['등지방'],
+                '최종등급': jn_df['등급'],
+                '출하농가': jn_df['출하농가'],
+                '이력번호': jn_df['이력번호'],
+                '거래처': '잇다'
+            })
+
+            output_jn = io.BytesIO()
+            with pd.ExcelWriter(output_jn, engine='openpyxl') as writer:
+                jn_export.to_excel(writer, sheet_name='잇다', index=False)
+            jn_data = output_jn.getvalue()
+
+            today_str = datetime.now().strftime("%m%d")
+            st.download_button(
+                label=f"📥 전남지사 전달용 엑셀 다운로드 ({today_str} 잇다.xlsx)",
+                data=jn_data,
+                file_name=f"{today_str} 잇다.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary"
+            )
+
+            st.markdown("---")
+            st.dataframe(jn_export, height=750, use_container_width=True)
+
+        else:
+            st.warning("전남지사로 할당된 물량이 없습니다.")
+    else:
+        st.info("👈 [🚀 자동 배정 실행] 탭에서 등급판정 파일을 먼저 업로드해 주세요.")
