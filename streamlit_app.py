@@ -493,7 +493,7 @@ if st.session_state.main_menu == "배정":
             st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
 
 # ==============================================================================
-# [메뉴 2] 농가 분석 (요청사항 반영: 등외 제거, 쉼표 포맷, 볼드 합계, 인덱스 숨김)
+# [메뉴 2] 농가 분석 (Pandas Styler로 합계 행 볼드체 & 배경색 완벽 적용)
 # ==============================================================================
 elif st.session_state.main_menu == "농가분석":
     st.title("📊 농가별 출하 및 스펙 분석")
@@ -568,7 +568,7 @@ elif st.session_state.main_menu == "농가분석":
 
         analysis_df = pd.DataFrame(rows)
 
-        # ----------------- 합계 행 (볼드체 적용) -----------------
+        # ----------------- 합계 행 계산 -----------------
         total_head = len(pigs_all)
         total_w = pigs_all['중량'].sum()
         dressing_rate = 76.32
@@ -599,25 +599,25 @@ elif st.session_state.main_menu == "농가분석":
         tot_top_ratio = ((tot_1plus + tot_1) / total_head * 100) if total_head > 0 else 0
 
         sum_row = pd.DataFrame([{
-            '농가': '**합계**',
-            '사료사': '**-**',
-            '두수': f"**{total_head:,}**",
-            '중량': f"**{int(round(total_w)):,}**",
-            '생체': f"**{int(round(total_live)):,}**",
-            '생체평균': f"**{avg_live_tot:.2f}**",
-            '도체 kg': f"**{avg_carcass_tot:.1f}**",
-            '등지방 mm': f"**{avg_fat_tot:.1f}**",
-            '지육율': '**76.32%**',
-            '86~96,19~23': f"**{tot_spec_cnt:,}**",
-            '스펙비율': f"**{tot_spec_ratio:.1f}%**",
-            '암': f"**{tot_female:,}**",
-            '1+': f"**{tot_1plus:,}**",
-            '1+ 중량': f"**{int(round(tot_1plus_w)):,}**",
-            '1': f"**{tot_1:,}**",
-            '1 중량': f"**{int(round(tot_1_w)):,}**",
-            '2': f"**{tot_2:,}**",
-            '2 중량': f"**{int(round(tot_2_w)):,}**",
-            '1+,1 비율': f"**{tot_top_ratio:.2f}%**"
+            '농가': '합계',
+            '사료사': '-',
+            '두수': f"{total_head:,}",
+            '중량': f"{int(round(total_w)):,}",
+            '생체': f"{int(round(total_live)):,}",
+            '생체평균': f"{avg_live_tot:.2f}",
+            '도체 kg': f"{avg_carcass_tot:.1f}",
+            '등지방 mm': f"{avg_fat_tot:.1f}",
+            '지육율': '76.32%',
+            '86~96,19~23': f"{tot_spec_cnt:,}",
+            '스펙비율': f"{tot_spec_ratio:.1f}%",
+            '암': f"{tot_female:,}",
+            '1+': f"{tot_1plus:,}",
+            '1+ 중량': f"{int(round(tot_1plus_w)):,}",
+            '1': f"{tot_1:,}",
+            '1 중량': f"{int(round(tot_1_w)):,}",
+            '2': f"{tot_2:,}",
+            '2 중량': f"{int(round(tot_2_w)):,}",
+            '1+,1 비율': f"{tot_top_ratio:.2f}%"
         }])
 
         final_analysis_df = pd.concat([analysis_df, sum_row], ignore_index=True)
@@ -636,11 +636,19 @@ elif st.session_state.main_menu == "농가분석":
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
+        # ----------------- 마지막 '합계' 행 볼드체 및 연한 회색 배경 스타일 지정 -----------------
+        def highlight_total_row(row):
+            if row['농가'] == '합계':
+                return ['font-weight: bold; background-color: #f1f3f5;'] * len(row)
+            return [''] * len(row)
+
+        styled_df = final_analysis_df.style.apply(highlight_total_row, axis=1)
+
         # 딱 맞춘 높이 (남는 빈 표 행 없음)
         calc_height = (len(final_analysis_df) + 1) * 36 + 5
 
         st.dataframe(
-            final_analysis_df, 
+            styled_df, 
             height=calc_height, 
             use_container_width=True,
             hide_index=True,
