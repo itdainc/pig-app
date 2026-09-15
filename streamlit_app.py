@@ -59,16 +59,21 @@ default_specs = [
 if 'spec_df' not in st.session_state:
     st.session_state.spec_df = pd.DataFrame(default_specs)
 
+# ----------------- 표 컬럼 너비 및 정렬 세부 설정 -----------------
 def get_centered_column_config(df):
     config = {}
     for col in df.columns:
         if col == "우선순위":
             config[col] = st.column_config.Column(col, alignment="center", width="small")
+        elif col == "비고":
+            config[col] = st.column_config.Column(col, alignment="center", width="large")
+        elif col in ["출하농가", "이력번호"]:
+            config[col] = st.column_config.Column(col, alignment="center", width="medium")
         else:
             config[col] = st.column_config.Column(col, alignment="center")
     return config
 
-# ----------------- 파일 업로드 시에만 계산 후 세션 저장 (메뉴 이동 시 유지) -----------------
+# ----------------- 파일 업로드 시에만 계산 후 세션 저장 -----------------
 if uploaded_grade:
     try:
         raw_df = pd.read_excel(uploaded_grade, header=None)
@@ -403,7 +408,8 @@ if st.session_state.main_menu == "배정":
                         if spec['배제농가'] and any(farm in str(row['출하농가']) for farm in spec['배제농가']):
                             diffs.append(f"배제농가포함({row['출하농가']})")
 
-                        remarks.append(", ".join(diffs) if diffs else "스펙일치")
+                        # 비고 사유 구분을 컴마+줄바꿈으로 정돈
+                        remarks.append(",\n".join(diffs) if diffs else "스펙일치")
 
                     comp_df['비고'] = remarks
                     
