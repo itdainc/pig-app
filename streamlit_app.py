@@ -15,7 +15,7 @@ try:
 except Exception:
     conn = None
 
-# 이미지 표 기준 기본 스펙 데이터 설정 (배제농가 컬럼 추가)
+# 기본 스펙 데이터 설정
 default_specs = [
     {"업체명": "대용식품", "우선순위": 3, "목표두수": 15, "지급률": "107.0%", "중량(kg)": "85~90", "등지방(mm)": "18~21", "등급": "1,1+", "암 비율": "60%", "외관": "", "육질": "", "결함": "", "배제농가": ""},
     {"업체명": "민강", "우선순위": 1, "목표두수": 60, "지급률": "107.0%", "중량(kg)": "85~97", "등지방(mm)": "21~25", "등급": "1,1+", "암 비율": "50%", "외관": "", "육질": "", "결함": "", "배제농가": ""},
@@ -91,17 +91,48 @@ with tab2:
 
     if uploaded_grade:
         try:
-            df_g = pd.read_excel(uploaded_grade, header=3)
-            
+            # 엑셀 헤더 위치 자동 검색
+            raw_df = pd.read_excel(uploaded_grade, header=None)
+            header_row_idx = 3
+            for r_idx in range(min(10, len(raw_df))):
+                row_vals = [str(v) for v in raw_df.iloc[r_idx].values]
+                if any('도체' in v for v in row_vals) and any('중량' in v or '도체중' in v for v in row_vals):
+                    header_row_idx = r_idx
+                    break
+
+            df_g = pd.read_excel(uploaded_grade, header=header_row_idx)
+
+            # 컬럼명 자동 매칭 로직 (이력번호 오독 완전 방지)
+            def find_col(possible_names, default_idx):
+                for col in df_g.columns:
+                    col_clean = str(col).replace('\n', '').replace(' ', '')
+                    for p in possible_names:
+                        if p in col_clean:
+                            return col
+                if df_g.shape[1] > default_idx:
+                    return df_g.columns[default_idx]
+                return None
+
+            col_pig_no = find_col(['도체번호', '도체'], 4)
+            col_sex = find_col(['성별', '성'], 7)
+            col_weight = find_col(['도체중', '중량'], 8)
+            col_fat = find_col(['등지방', '지방두께'], 9)
+            col_grade = find_col(['최종등급', '등급'], 22)
+            col_farm = find_col(['출하농가', '농가명', '농가'], 21)
+            col_history = find_col(['이력번호', '이력'], 999) # 번호 기반 오독 방지를 위해 지명어 없으면 비움
+
             pigs = pd.DataFrame({
-                '도체번호': pd.to_numeric(df_g.iloc[:, 4], errors='coerce').fillna(0).astype(int),
-                '성별': df_g.iloc[:, 7].astype(str),
-                '중량': pd.to_numeric(df_g.iloc[:, 8], errors='coerce'),
-                '등지방': pd.to_numeric(df_g.iloc[:, 9], errors='coerce'),
-                '등급': df_g.iloc[:, 22].astype(str),
-                '출하농가': df_g.iloc[:, 21].astype(str) if df_g.shape[1] > 21 else '',
-                '이력번호': df_g.iloc[:, 24].astype(str) if df_g.shape[1] > 24 else ''
+                '도체번호': pd.to_numeric(df_g[col_pig_no], errors='coerce').fillna(0).astype(int) if col_pig_no else 0,
+                '성별': df_g[col_sex].astype(str).str.strip() if col_sex else '',
+                '중량': pd.to_numeric(df_g[col_weight], errors='coerce') if col_weight else 0.0,
+                '등지방': pd.to_numeric(df_g[col_fat], errors='coerce') if col_fat else 0.0,
+                '등급': df_g[col_grade].astype(str).str.strip() if col_grade else '',
+                '출하농가': df_g[col_farm].astype(str).str.strip().replace('nan', '').replace('None', '') if col_farm else '',
+                '이력번호': df_g[col_history].astype(str).str.strip().replace('nan', '').replace('None', '') if col_history else ''
             }).dropna(subset=['중량']).copy()
+
+            # 이상한 숫자/소수점 이력번호 필터링 (진짜 이력번호는 12자리 이상 숫자)
+            pigs['이력번호'] = pigs['이력번호'].apply(lambda x: x if len(str(x).replace('.0','')) >= 10 else '')
 
             pigs.reset_index(drop=True, inplace=True)
             pigs.index = pigs.index + 1
@@ -118,7 +149,6 @@ with tab2:
                 grade_str = str(row['등급'])
                 f_ratio_str = str(row['암 비율'])
                 
-                # 배제농가 파싱
                 exclude_farms_str = str(row.get('배정농가', row.get('배제농가', '')))
                 exclude_farms = [f.strip() for f in exclude_farms_str.split(',') if f.strip() and f.strip() != 'nan']
 
@@ -128,7 +158,6 @@ with tab2:
                                 else (float(fat_str), float(fat_str)) if fat_str!='nan' else (0, 999))
                 grades = [g.strip() for g in grade_str.split(',')] if grade_str != 'nan' else []
 
-                # 암 비율 계산
                 f_ratio_val = float(f_ratio_str.replace('%', '')) / 100.0 if '%' in f_ratio_str else 0.5
                 c_ratio_val = 1.0 - f_ratio_val
 
@@ -143,7 +172,6 @@ with tab2:
                 specs.append(spec_obj)
                 specs_dict[name] = spec_obj
 
-            # 우선순위 순 정렬 (숫자 작은 것이 1순위)
             specs.sort(key=lambda x: x['우선순위'])
 
             pigs['배정거래처'] = '미배정'
@@ -155,13 +183,11 @@ with tab2:
                 if target <= 0:
                     continue
 
-                # 1) 배제농가 조건 적용
                 cond_base = (pigs['배정거래처'] == '미배정')
                 if spec['배제농가']:
                     for farm in spec['배제농가']:
                         cond_base &= (~pigs['출하농가'].str.contains(farm, na=False))
 
-                # 2) 스펙 매칭 (중량, 등지방, 등급)
                 cond_spec = cond_base & (
                     (pigs['중량'] >= spec['w_min']) & (pigs['중량'] <= spec['w_max']) &
                     (pigs['등지방'] >= spec['f_min']) & (pigs['등지방'] <= spec['f_max'])
@@ -171,7 +197,6 @@ with tab2:
 
                 matched_all = pigs[cond_spec]
 
-                # 3) 암/거세 비율에 따른 목표두수 분할 배정
                 if not matched_all.empty:
                     target_f = int(round(target * spec['암비율_val']))
                     target_c = target - target_f
@@ -182,14 +207,12 @@ with tab2:
                     pigs.loc[matched_f.index, '배정거래처'] = company
                     pigs.loc[matched_c.index, '배정거래처'] = company
 
-                    # 비율 매칭 후 부족한 수량은 성별 상관없이 동일 스펙에서 추가 충원
                     curr_assigned = len(pigs[pigs['배정거래처'] == company])
                     if curr_assigned < target:
                         needed = target - curr_assigned
                         rem_matched = pigs[cond_spec & (pigs['배정거래처'] == '미배정')].head(needed)
                         pigs.loc[rem_matched.index, '배정거래처'] = company
 
-                # 4) 만약 100% 스펙 완벽 매칭으로 목표두수를 못 채운 경우 스펙 유연 완화 매칭
                 curr_assigned = len(pigs[pigs['배정거래처'] == company])
                 if curr_assigned < target:
                     needed = target - curr_assigned
@@ -202,7 +225,6 @@ with tab2:
                         matched_relaxed = candidates.sort_values('score').head(needed)
                         pigs.loc[matched_relaxed.index, '배정거래처'] = company
 
-            # 모든 우선순위 배정 완료 후 남은 돼지는 전부 '잇다'로 할당
             unassigned_mask = pigs['배정거래처'] == '미배정'
             pigs.loc[unassigned_mask, '배정거래처'] = '잇다'
 
