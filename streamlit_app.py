@@ -41,12 +41,15 @@ except Exception:
 if 'spec_df' not in st.session_state:
     st.session_state.spec_df = spec_df
 
-# 공통 가운데 정렬 + 검은색 글자 스타일 지정 함수
-def style_center_black(df):
-    return df.style.set_properties(**{
-        'text-align': 'center',
-        'color': '#000000'
-    })
+# 가운데 정렬 column_config 설정
+def get_centered_column_config(df):
+    config = {}
+    for col in df.columns:
+        config[col] = st.column_config.Column(
+            col,
+            alignment="center"
+        )
+    return config
 
 # ----------------- 탭 구성 -----------------
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
@@ -67,11 +70,11 @@ with tab1:
             df_g = pd.read_excel(uploaded_grade, header=3)
             
             pigs = pd.DataFrame({
-                '도체번호': pd.to_numeric(df_g.iloc[:, 4], errors='coerce'),
-                '성별': df_g.iloc[:, 7],
+                '도체번호': pd.to_numeric(df_g.iloc[:, 4], errors='coerce').fillna(0).astype(int),
+                '성별': df_g.iloc[:, 7].astype(str),
                 '중량': pd.to_numeric(df_g.iloc[:, 8], errors='coerce'),
                 '등지방': pd.to_numeric(df_g.iloc[:, 9], errors='coerce'),
-                '등급': df_g.iloc[:, 22],
+                '등급': df_g.iloc[:, 22].astype(str),
                 '출하농가': '',
                 '이력번호': ''
             }).dropna(subset=['중량']).copy()
@@ -103,7 +106,9 @@ with tab1:
                 spec_obj = {
                     '업체명': name, 'w_min': w_min, 'w_max': w_max,
                     'f_min': f_min, 'f_max': f_max, 'grades': grades,
-                    '거세비율': c_ratio, '암비율': f_ratio
+                    '거세비율': c_ratio, '암비율': f_ratio,
+                    'weight_str': weight_str, 'fat_str': fat_str, 'grade_str': grade_str,
+                    'c_cnt': int(c_cnt), 'f_cnt': int(f_cnt)
                 }
                 specs.append(spec_obj)
                 specs_dict[name] = spec_obj
@@ -155,19 +160,23 @@ with tab1:
             st.session_state['allocated_pigs'] = pigs
             st.session_state['specs_dict'] = specs_dict
 
-            # ----------------- 좌측 배정요약 표 (요청: 합계 / 거세 / 암 순서 및 가운데 검은색) -----------------
+            # ----------------- 좌측 배정요약 표 -----------------
             summary = pigs.groupby(['배정거래처', '성별']).size().unstack(fill_value=0)
             if '거세' not in summary.columns: summary['거세'] = 0
             if '암' not in summary.columns: summary['암'] = 0
             
             summary['합계'] = summary['거세'] + summary['암']
-            # 요청하신 컬럼 순서 지정: 합계 -> 거세 -> 암
             summary = summary[['합계', '거세', '암']]
             summary.columns.name = None
 
             st.sidebar.markdown("---")
             st.sidebar.subheader("📊 거래처별 배정 요약")
-            st.sidebar.dataframe(style_center_black(summary), use_container_width=True, height=500)
+            st.sidebar.dataframe(
+                summary, 
+                use_container_width=True, 
+                height=500,
+                column_config=get_centered_column_config(summary)
+            )
 
             # ----------------- 상단 지표 -----------------
             total_pigs = len(pigs)
@@ -184,7 +193,6 @@ with tab1:
             col_main, _ = st.columns([4, 1])
             with col_main:
                 st.subheader("📋 전체 개체별 세부 배정 내역")
-                st.caption("💡 표 상단의 열 이름(도체번호, 성별, 중량 등)을 클릭하면 △/▽ 정렬이 가능합니다.")
                 
                 today_tab_name = datetime.now().strftime("%Y-%m-%d")
                 
@@ -214,14 +222,19 @@ with tab1:
                     )
 
                 display_df = pigs[['도체번호', '성별', '중량', '등지방', '등급', '배정거래처', '이력번호', '출하농가']].copy()
-                st.dataframe(style_center_black(display_df), height=750, use_container_width=True)
+                st.dataframe(
+                    display_df, 
+                    height=750, 
+                    use_container_width=True,
+                    column_config=get_centered_column_config(display_df)
+                )
 
         except Exception as e:
             st.error(f"파일 처리 중 오류가 발생했습니다: {e}")
     else:
         st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]만 올려주시면 바로 배정됩니다.")
 
-# ----------------- 탭 2: 거래처별 배정 상세 (비고란 스펙 분석 추가) -----------------
+# ----------------- 탭 2: 거래처별 배정 상세 -----------------
 with tab2:
     st.subheader("🏢 거래처별 개별 배정 내역 및 명단")
     
@@ -254,35 +267,39 @@ with tab2:
             with col_comp_main:
                 selected_company = st.session_state.selected_company
                 st.markdown(f"### **[{selected_company}] 배정 명단**")
-                st.caption("💡 표 상단의 열 이름(도체번호, 성별, 중량 등)을 클릭하면 △/▽ 정렬이 가능합니다.")
+
+                # 스펙 정보 상단 안내 박스
+                spec = specs_dict.get(selected_company, None)
+                if spec:
+                    st.info(f"🎯 **[{selected_company}] 설정 스펙** ➔ **중량:** {spec['weight_str']} kg | **등지방:** {spec['fat_str']} mm | **등급:** {spec['grade_str']} | **목표 비율(거세:암):** {spec['c_cnt']} : {spec['f_cnt']}")
 
                 comp_df = pigs_all[pigs_all['배정거래처'] == selected_company].copy()
                 comp_df.reset_index(drop=True, inplace=True)
                 comp_df.index = comp_df.index + 1
 
-                # ----------------- 비고란 스펙 딸림 분석 계산 -----------------
-                spec = specs_dict.get(selected_company, None)
+                # 소수점 깔끔하게 정리
+                comp_df['도체번호'] = comp_df['도체번호'].astype(int)
+                comp_df['중량'] = comp_df['중량'].round(1)
+                comp_df['등지방'] = comp_df['등지방'].round(1)
+
+                # 비고란 스펙 분석
                 remarks = []
-                
                 for idx, row in comp_df.iterrows():
                     if not spec:
                         remarks.append("-")
                         continue
                     
                     diffs = []
-                    # 중량 체크
                     if row['중량'] < spec['w_min']:
                         diffs.append(f"중량미달({row['중량']}kg < {spec['w_min']}kg)")
                     elif row['중량'] > spec['w_max']:
                         diffs.append(f"중량초과({row['중량']}kg > {spec['w_max']}kg)")
                     
-                    # 등지방 체크
                     if row['등지방'] < spec['f_min']:
                         diffs.append(f"등지방미달({row['등지방']}mm < {spec['f_min']}mm)")
                     elif row['등지방'] > spec['f_max']:
                         diffs.append(f"등지방초과({row['등지방']}mm > {spec['f_max']}mm)")
                     
-                    # 등급 체크
                     if spec['grades'] and str(row['등급']).strip() not in spec['grades']:
                         diffs.append(f"등급불일치({row['등급']})")
                     
@@ -318,7 +335,12 @@ with tab2:
                 )
                 
                 comp_display = comp_df[['도체번호', '성별', '중량', '등지방', '등급', '비고', '이력번호', '출하농가']].copy()
-                st.dataframe(style_center_black(comp_display), height=1200, use_container_width=True)
+                st.dataframe(
+                    comp_display, 
+                    height=1200, 
+                    use_container_width=True,
+                    column_config=get_centered_column_config(comp_display)
+                )
         else:
             st.info("배정된 일반 거래처 내역이 없습니다.")
     else:
@@ -374,10 +396,19 @@ with tab4:
                     c1, c2 = st.columns([1, 2])
                     with c1:
                         st.write("**거래처별 요약**")
-                        st.dataframe(style_center_black(summary_hist), use_container_width=True)
+                        st.dataframe(
+                            summary_hist, 
+                            use_container_width=True,
+                            column_config=get_centered_column_config(summary_hist)
+                        )
                     with c2:
                         st.write("**상세 개체 내역**")
-                        st.dataframe(style_center_black(hist_df), height=600, use_container_width=True)
+                        st.dataframe(
+                            hist_df, 
+                            height=600, 
+                            use_container_width=True,
+                            column_config=get_centered_column_config(hist_df)
+                        )
             except Exception:
                 st.error(f"❌ [{target_tab}] 날짜로 저장된 구글 시트 탭이 없습니다.")
 
@@ -434,7 +465,12 @@ with tab5:
             st.markdown("---")
             col_jn_main, _ = st.columns([4, 1])
             with col_jn_main:
-                st.dataframe(style_center_black(jn_export), height=750, use_container_width=True)
+                st.dataframe(
+                    jn_export, 
+                    height=750, 
+                    use_container_width=True,
+                    column_config=get_centered_column_config(jn_export)
+                )
 
         else:
             st.warning("전남지사로 할당된 물량이 없습니다.")
