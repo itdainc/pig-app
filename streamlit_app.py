@@ -25,22 +25,27 @@ if st.sidebar.button(
     type="primary" if st.session_state.main_menu == "배정" else "secondary", 
     use_container_width=True
 ):
-    if st.session_state.main_menu != "배정":
-        st.session_state.main_menu = "배정"
-        st.rerun()
+    st.session_state.main_menu = "배정"
+    st.rerun()
 
 if st.sidebar.button(
     "📊 2. 농가 분석", 
     type="primary" if st.session_state.main_menu == "농가분석" else "secondary", 
     use_container_width=True
 ):
-    if st.session_state.main_menu != "농가분석":
-        st.session_state.main_menu = "농가분석"
-        st.rerun()
+    st.session_state.main_menu = "농가분석"
+    st.rerun()
 
 st.sidebar.markdown("---")
 st.sidebar.header("📁 파일 업로드")
 uploaded_grade = st.sidebar.file_uploader("1. 등급판정 결과 파일 (.xls/.xlsx)", type=["xls", "xlsx"])
+
+# 파일 업로더가 비어있으면 기존 데이터 세션 초기화 (표 자동 삭제)
+if not uploaded_grade:
+    if 'allocated_pigs' in st.session_state:
+        del st.session_state['allocated_pigs']
+    if 'specs_dict' in st.session_state:
+        del st.session_state['specs_dict']
 
 # 기본 스펙 데이터 설정
 default_specs = [
@@ -70,8 +75,8 @@ def get_centered_column_config(df):
             config[col] = st.column_config.Column(col, alignment="center")
     return config
 
-# ----------------- 파일 업로드 시에만 데이터 동적 파싱 -----------------
-if uploaded_grade:
+# ----------------- 엑셀 파일이 새로 업로드 되었을 때만 파싱 연산 수행 -----------------
+if uploaded_grade and 'allocated_pigs' not in st.session_state:
     try:
         raw_df = pd.read_excel(uploaded_grade, header=None)
         header_row_idx = 3
@@ -258,7 +263,7 @@ if st.session_state.main_menu == "배정":
 
     # ----------------- 탭 2: 자동 배정 실행 -----------------
     with tab2:
-        if 'allocated_pigs' in st.session_state:
+        if 'allocated_pigs' in st.session_state and uploaded_grade:
             pigs = st.session_state['allocated_pigs']
 
             total_pigs = len(pigs)
@@ -311,7 +316,7 @@ if st.session_state.main_menu == "배정":
     with tab3:
         st.subheader("🏢 거래처별 개별 배정 내역 및 명단")
         
-        if 'allocated_pigs' in st.session_state and 'specs_dict' in st.session_state:
+        if 'allocated_pigs' in st.session_state and 'specs_dict' in st.session_state and uploaded_grade:
             pigs_all = st.session_state['allocated_pigs']
             specs_dict = st.session_state['specs_dict']
             
@@ -430,7 +435,7 @@ if st.session_state.main_menu == "배정":
     with tab4:
         st.subheader("🚚 잇다 배정")
         
-        if 'allocated_pigs' in st.session_state:
+        if 'allocated_pigs' in st.session_state and uploaded_grade:
             pigs_all = st.session_state['allocated_pigs']
             jn_df = pigs_all[pigs_all['배정거래처'] == '잇다'].copy()
             
@@ -495,12 +500,12 @@ if st.session_state.main_menu == "배정":
             st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
 
 # ==============================================================================
-# [메뉴 2] 농가 분석 (실제 지육율 수식 = 중량 / 생체 * 100 적용)
+# [메뉴 2] 농가 분석 (파일이 업로드되었을 때만 표가 생성됨)
 # ==============================================================================
 elif st.session_state.main_menu == "농가분석":
     st.title("📊 농가별 출하 및 스펙 분석")
     
-    if 'allocated_pigs' in st.session_state:
+    if 'allocated_pigs' in st.session_state and uploaded_grade:
         pigs_all = st.session_state['allocated_pigs'].copy()
         
         def extract_feed_and_farm(val):
@@ -519,11 +524,8 @@ elif st.session_state.main_menu == "농가분석":
             head_cnt = len(group)
             total_weight = group['중량'].sum()
             
-            # 대표 지육율 환산 계수로 생체중 수식 역산
             dressing_rate_val = 76.32
             live_weight = total_weight / (dressing_rate_val / 100.0)
-            
-            # 실제 지육율 계산 공식: 중량 / 생체중 * 100
             real_dressing_rate = (total_weight / live_weight * 100) if live_weight > 0 else 0.0
 
             avg_live_weight = live_weight / head_cnt if head_cnt > 0 else 0
@@ -575,7 +577,6 @@ elif st.session_state.main_menu == "농가분석":
 
         analysis_df = pd.DataFrame(rows)
 
-        # ----------------- 총합계 수식 집계 -----------------
         total_head = len(pigs_all)
         total_w = pigs_all['중량'].sum()
         total_live = total_w / (76.32 / 100.0)
