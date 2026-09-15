@@ -41,7 +41,7 @@ except Exception:
 if 'spec_df' not in st.session_state:
     st.session_state.spec_df = spec_df
 
-# ----------------- 탭 구성 (요청 반영) -----------------
+# ----------------- 탭 구성 -----------------
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🚀 자동 배정 실행", 
     "🏢 거래처별 배정 상세",
@@ -210,17 +210,40 @@ with tab1:
     else:
         st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]만 올려주시면 바로 배정됩니다.")
 
-# ----------------- 탭 2: 거래처별 배정 상세 (신규 추가) -----------------
+# ----------------- 탭 2: 거래처별 배정 상세 (ㄱㄴㄷ순 나열 UI) -----------------
 with tab2:
     st.subheader("🏢 거래처별 개별 배정 내역 및 명단")
     
     if 'allocated_pigs' in st.session_state:
         pigs_all = st.session_state['allocated_pigs']
-        company_list = [c for c in pigs_all['배정거래처'].unique() if c != '전남지사(잇다)']
+        
+        # ㄱㄴㄷ 가나다순 정렬
+        company_list = sorted([c for c in pigs_all['배정거래처'].unique() if c != '전남지사(잇다)'])
         
         if company_list:
-            selected_company = st.selectbox("📌 조회 및 출력할 거래처 선택:", company_list)
+            if 'selected_company' not in st.session_state or st.session_state.selected_company not in company_list:
+                st.session_state.selected_company = company_list[0]
+
+            st.write("👉 **조회할 거래처를 클릭하세요 (가나다순 정렬):**")
             
+            # 가나다순으로 한 줄에 여러 개 버튼 배치
+            cols = st.columns(min(len(company_list), 6))
+            for idx, comp in enumerate(company_list):
+                col_idx = idx % 6
+                # 선택된 거래처에 눈에 띄는 표시
+                is_selected = (comp == st.session_state.selected_company)
+                label = f"📌 {comp}" if is_selected else comp
+                btn_type = "primary" if is_selected else "secondary"
+                
+                if cols[col_idx].button(label, key=f"btn_comp_{comp}", type=btn_type, use_container_width=True):
+                    st.session_state.selected_company = comp
+                    st.rerun()
+
+            st.markdown("---")
+            
+            selected_company = st.session_state.selected_company
+            st.markdown(f"### <u>**[{selected_company}] 배정 명단**</u>", unsafe_allow_html=True)
+
             comp_df = pigs_all[pigs_all['배정거래처'] == selected_company].copy()
             comp_df.reset_index(drop=True, inplace=True)
             comp_df.index = comp_df.index + 1
@@ -237,7 +260,7 @@ with tab2:
             m4.metric("평균 중량", f"{avg_w:.1f} kg")
             m5.metric("평균 등지방", f"{avg_f:.1f} mm")
             
-            st.markdown("---")
+            st.markdown(" ")
             
             # 개별 거래처 엑셀 다운로드
             output_comp = io.BytesIO()
@@ -246,14 +269,14 @@ with tab2:
             comp_data = output_comp.getvalue()
             
             st.download_button(
-                label=f"📥 {selected_company} 전달용 엑셀 다운로드",
+                label=f"📥 [{selected_company}] 배정 명단 엑셀 다운로드",
                 data=comp_data,
                 file_name=f"{selected_company}_배정명단.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 type="primary"
             )
             
-            st.dataframe(comp_df[['도체번호', '성별', '중량', '등지방', '등급', '이력번호', '출하농가']], height=650, use_container_width=True)
+            st.dataframe(comp_df[['도체번호', '성별', '중량', '등지방', '등급', '이력번호', '출하농가']], height=600, use_container_width=True)
         else:
             st.info("배정된 일반 거래처 내역이 없습니다.")
     else:
