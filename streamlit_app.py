@@ -10,9 +10,10 @@ except ImportError:
     def check_password(): return True
 
 try:
-    from auto_allocator import DEFAULT_SPECS, allocate_pigs_data
+    from auto_allocator import DEFAULT_TARGET_COUNTS, get_default_specs, allocate_pigs_data
 except ImportError:
-    DEFAULT_SPECS = []
+    DEFAULT_TARGET_COUNTS = {}
+    def get_default_specs(custom_targets=None): return []
     def allocate_pigs_data(file, specs): return pd.DataFrame(), {}
 
 # 로그인 검증
@@ -23,13 +24,23 @@ if check_password():
     if 'main_menu' not in st.session_state:
         st.session_state.main_menu = "배정"
 
+    if 'target_counts' not in st.session_state:
+        st.session_state.target_counts = DEFAULT_TARGET_COUNTS.copy()
+
+    if 'spec_df' not in st.session_state:
+        st.session_state.spec_df = pd.DataFrame(get_default_specs(st.session_state.target_counts))
+
     st.sidebar.title("📌 메인 메뉴")
 
     if st.sidebar.button("🏢 1. 거래처 자동 배정 시스템", type="primary" if st.session_state.main_menu == "배정" else "secondary", use_container_width=True):
         st.session_state.main_menu = "배정"
         st.rerun()
 
-    if st.sidebar.button("📊 2. 농가 분석", type="primary" if st.session_state.main_menu == "농가분석" else "secondary", use_container_width=True):
+    if st.sidebar.button("⚙️ 2. 거래처 목표두수 관리", type="primary" if st.session_state.main_menu == "스펙" else "secondary", use_container_width=True):
+        st.session_state.main_menu = "스펙"
+        st.rerun()
+
+    if st.sidebar.button("📊 3. 농가 분석", type="primary" if st.session_state.main_menu == "농가분석" else "secondary", use_container_width=True):
         st.session_state.main_menu = "농가분석"
         st.rerun()
 
@@ -44,7 +55,7 @@ if check_password():
     def get_centered_column_config(df):
         config = {}
         for col in df.columns:
-            if col == "우선순위":
+            if col in ["우선순위", "목표두수"]:
                 config[col] = st.column_config.Column(col, alignment="center", width="small")
             elif col == "비고":
                 config[col] = st.column_config.Column(col, alignment="center", width="large")
@@ -57,7 +68,7 @@ if check_password():
     # 파일 업로드 시 연동 엔진 실행
     if uploaded_grade:
         try:
-            pigs, specs_dict = allocate_pigs_data(uploaded_grade, pd.DataFrame(DEFAULT_SPECS))
+            pigs, specs_dict = allocate_pigs_data(uploaded_grade, st.session_state.spec_df)
             st.session_state['allocated_pigs'] = pigs
             st.session_state['specs_dict'] = specs_dict
         except Exception as e:
@@ -78,8 +89,8 @@ if check_password():
 
                 c1, c2, c3 = st.columns(3)
                 c1.metric("총 도축 수량", f"{len(pigs)} 두")
-                c2.metric("일반 거래처 배정 수량", f"{len(pigs[pigs['배정거래처'] != '잇다'])} 두")
-                c3.metric("잇다 잔여 할당 수량", f"{len(pigs[pigs['배정거래처'] == '잇다'])} 두")
+                c2.metric("일반 거래처 배정 수량", f"{len(pigs[~pigs['배정거래처'].str.contains('잇다', na=False)])} 두")
+                c3.metric("잇다 잔여 할당 수량", f"{len(pigs[pigs['배정거래처'].str.contains('잇다', na=False)])} 두")
 
                 st.markdown("---")
                 
@@ -108,19 +119,19 @@ if check_password():
                     )
 
                     display_df = pigs[['도체번호', '성별', '중량', '등지방', '등급', '배정거래처', '이력번호', '출하농가']].copy()
-                    st.dataframe(display_df, height=(len(display_df) + 1) * 35 + 5, use_container_width=True, column_config=get_centered_column_config(display_df))
+                    calc_height = (len(display_df) + 1) * 35 + 10
+                    st.dataframe(display_df, height=calc_height, use_container_width=True, column_config=get_centered_column_config(display_df))
             else:
                 st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
 
-        # ----------------- 탭 2: 거래처별 배정 상세 (서브 스펙 위아래 분리 및 빈칸 제거) -----------------
+        # ----------------- 탭 2: 거래처별 배정 상세 -----------------
         with tab2:
             st.subheader("🏢 거래처별 개별 배정 내역 및 명단")
             if 'allocated_pigs' in st.session_state and 'specs_dict' in st.session_state:
                 pigs_all = st.session_state['allocated_pigs']
                 specs_dict = st.session_state['specs_dict']
                 
-                # '승민 1', '승민 2' -> 대표명 '승민'으로 그룹화
-                all_assigned = [c for c in pigs_all['배정거래처'].unique() if c != '잇다']
+                all_assigned = [c for c in pigs_all['배정거래처'].unique() if "잇다" not in c]
                 main_company_map = {}
                 for c in all_assigned:
                     base_name = c.split()[0]
@@ -147,7 +158,6 @@ if check_password():
                     selected_main = st.session_state.selected_company
                     sub_companies = sorted(main_company_map[selected_main])
 
-                    # 대표 거래처에 속하는 서브 스펙별로 위아래 표 출력
                     for sub_comp in sub_companies:
                         st.markdown(f"### **[{sub_comp}] 배정 명단**")
 
@@ -194,49 +204,79 @@ if check_password():
                         st.download_button(label=f"📥 [{sub_comp}] 배정 명단 엑셀 다운로드", data=output_comp.getvalue(), file_name=f"{sub_comp}_배정명단.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                         
                         comp_display = comp_df[['도체번호', '성별', '중량', '등지방', '등급', '비고', '이력번호', '출하농가']].copy()
-                        
-                        # 표 아래 빈칸 없도록 정확한 행 높이 지정
                         calc_height = (len(comp_display) + 1) * 35 + 10
                         st.dataframe(comp_display, height=calc_height, use_container_width=True, column_config=get_centered_column_config(comp_display))
                         st.markdown("<br>", unsafe_allow_html=True)
             else:
                 st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
 
-        # ----------------- 탭 3: 잇다 배정 -----------------
+        # ----------------- 탭 3: 잇다 배정 (잇다 1 / 잇다 2 구분) -----------------
         with tab3:
-            st.subheader("🚚 잇다 배정")
+            st.subheader("🚚 잇다 배정 내역")
             if 'allocated_pigs' in st.session_state:
                 pigs_all = st.session_state['allocated_pigs']
-                jn_df = pigs_all[pigs_all['배정거래처'] == '잇다'].copy()
-                if not jn_df.empty:
-                    jn_df.reset_index(drop=True, inplace=True)
-                    jn_df.index = jn_df.index + 1
-                    
-                    st.markdown(f"""
-                    <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 12px 18px; font-size: 15px; color: #333333; margin-bottom: 15px;">
-                        <strong>전남지사 배정수량 :</strong> {len(jn_df)}두 / <strong>총중량 :</strong> {jn_df['중량'].sum():,.1f} kg
-                    </div>
-                    """, unsafe_allow_html=True)
+                jn_pigs = pigs_all[pigs_all['배정거래처'].str.contains('잇다', na=False)].copy()
+                
+                if not jn_pigs.empty:
+                    for ita_type in sorted(jn_pigs['배정거래처'].unique()):
+                        jn_df = jn_pigs[jn_pigs['배정거래처'] == ita_type].copy()
+                        jn_df.reset_index(drop=True, inplace=True)
+                        jn_df.index = jn_df.index + 1
+                        
+                        st.markdown(f"### **[{ita_type}] 배정 내역**")
+                        st.markdown(f"""
+                        <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 12px 18px; font-size: 15px; color: #333333; margin-bottom: 15px;">
+                            <strong>수량 :</strong> {len(jn_df)}두 / <strong>총중량 :</strong> {jn_df['중량'].sum():,.1f} kg
+                        </div>
+                        """, unsafe_allow_html=True)
 
-                    jn_export = pd.DataFrame({
-                        'No.': jn_df.index, '작업장명': '나주농협', '판정일': datetime.now().day,
-                        '도체번호': jn_df['도체번호'], '판정방법': '온', '도체형태': '탕박',
-                        '성별': jn_df['성별'], '도체중(kg)': jn_df['중량'], '등지방두께': jn_df['등지방'],
-                        '최종등급': jn_df['등급'], '출하농가': jn_df['출하농가'], '이력번호': jn_df['이력번호'], '거래처': '잇다'
-                    })
+                        jn_export = pd.DataFrame({
+                            'No.': jn_df.index, '작업장명': '나주농협', '판정일': datetime.now().day,
+                            '도체번호': jn_df['도체번호'], '판정방법': '온', '도체형태': '탕박',
+                            '성별': jn_df['성별'], '도체중(kg)': jn_df['중량'], '등지방두께': jn_df['등지방'],
+                            '최종등급': jn_df['등급'], '출하농가': jn_df['출하농가'], '이력번호': jn_df['이력번호'], '거래처': ita_type
+                        })
 
-                    output_jn = io.BytesIO()
-                    with pd.ExcelWriter(output_jn, engine='openpyxl') as writer: jn_export.to_excel(writer, sheet_name='잇다', index=False)
-                    today_str = datetime.now().strftime("%m%d")
-                    
-                    st.download_button(label=f"📥 잇다 전달용 엑셀 다운로드 ({today_str} 잇다.xlsx)", data=output_jn.getvalue(), file_name=f"{today_str} 잇다.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                    calc_jn_height = (len(jn_export) + 1) * 35 + 10
-                    st.dataframe(jn_export, height=calc_jn_height, use_container_width=True, column_config=get_centered_column_config(jn_export))
+                        output_jn = io.BytesIO()
+                        with pd.ExcelWriter(output_jn, engine='openpyxl') as writer: jn_export.to_excel(writer, sheet_name=ita_type, index=False)
+                        today_str = datetime.now().strftime("%m%d")
+                        
+                        st.download_button(label=f"📥 [{ita_type}] 전달용 엑셀 다운로드 ({today_str} {ita_type}.xlsx)", data=output_jn.getvalue(), file_name=f"{today_str}_{ita_type}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                        calc_jn_height = (len(jn_export) + 1) * 35 + 10
+                        st.dataframe(jn_export, height=calc_jn_height, use_container_width=True, column_config=get_centered_column_config(jn_export))
+                        st.markdown("<br>", unsafe_allow_html=True)
             else:
                 st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
 
     # ==============================================================================
-    # [메뉴 2] 농가 분석
+    # [메뉴 2] 거래처 목표두수 관리 (직접 목표 두수를 입력/수정할 수 있는 페이지)
+    # ==============================================================================
+    elif st.session_state.main_menu == "스펙":
+        st.title("⚙️ 거래처별 배정 목표두수 수기 조정")
+        st.info("💡 예상 도축 수량 변경에 따라 거래처별 배정 목표 두수를 직접 입력하여 조정할 수 있습니다.")
+
+        # 에디터용 표 생성
+        edited_spec_df = st.data_editor(
+            st.session_state.spec_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            height=600,
+            key="target_count_editor",
+            column_config=get_centered_column_config(st.session_state.spec_df)
+        )
+
+        if st.button("💾 변경된 목표 두수 적용 및 재배정 실행", type="primary", use_container_width=True):
+            st.session_state.spec_df = edited_spec_df
+            if uploaded_grade:
+                pigs, specs_dict = allocate_pigs_data(uploaded_grade, st.session_state.spec_df)
+                st.session_state['allocated_pigs'] = pigs
+                st.session_state['specs_dict'] = specs_dict
+                st.success("✅ 새로운 목표두수가 적용되어 거래처 자동 배정이 재계산되었습니다!")
+            else:
+                st.success("✅ 거래처 목표 두수가 업데이트되었습니다. 왼쪽 사이드바에서 파일을 업로드하시면 반영됩니다.")
+
+    # ==============================================================================
+    # [메뉴 3] 농가 분석
     # ==============================================================================
     elif st.session_state.main_menu == "농가분석":
         st.title("📊 농가별 출하 및 스펙 분석")
