@@ -4,7 +4,7 @@ import io
 
 st.set_page_config(page_title="도축 스펙 거래처 자동 배정", layout="wide", page_icon="🐖")
 
-st.title("🐖 돼지 도축 스펙 거래처 자동 배정 시스템")
+st.title("🐖 돼지 도축 스펙 거래처 자동 배정")
 st.markdown("도축 등급판정 파일과 거래처 스팩 파일을 업로드하면 최적의 거래처를 자동으로 배정합니다.")
 
 # ----------------- 왼쪽 사이드바 -----------------
@@ -22,6 +22,10 @@ if uploaded_grade and uploaded_spec:
             '등지방': pd.to_numeric(df_g.iloc[:, 9], errors='coerce'),
             '등급': df_g.iloc[:, 22]
         }).dropna(subset=['중량']).copy()
+
+        # 인덱스를 1번부터 시작하도록 재설정
+        pigs.reset_index(drop=True, inplace=True)
+        pigs.index = pigs.index + 1
 
         df_s = pd.read_excel(uploaded_spec).dropna(subset=['Unnamed: 0'])
         specs = []
@@ -67,7 +71,7 @@ if uploaded_grade and uploaded_spec:
         st.sidebar.markdown("---")
         st.sidebar.subheader("📊 거래처별 배정 요약")
         summary = pigs[pigs['배정거래처'] != '미배정'].groupby(['배정거래처', '성별']).size().unstack(fill_value=0)
-        st.sidebar.dataframe(summary, use_container_width=True, height=400)
+        st.sidebar.dataframe(summary, use_container_width=True, height=500)
 
         # ----------------- 오른쪽 메인 화면 -----------------
         total_pigs = len(pigs)
@@ -81,16 +85,14 @@ if uploaded_grade and uploaded_spec:
 
         st.markdown("---")
         
-        # 세부 내역 영역 (폭을 줄이기 위해 컬럼 분할)
         col_main, col_empty = st.columns([3, 1])
         
         with col_main:
             st.subheader("📋 전체 개체별 세부 배정 내역")
             
-            # 엑셀 다운로드 버튼 추가
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                pigs.to_excel(writer, sheet_name='배정내역', index=False)
+                pigs.to_excel(writer, sheet_name='배정내역')
                 summary.to_excel(writer, sheet_name='요약')
             processed_data = output.getvalue()
             
@@ -101,8 +103,8 @@ if uploaded_grade and uploaded_spec:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
-            # 세로로 긴 표 형태 (높이 600px 지정)
-            st.dataframe(pigs, height=600, use_container_width=True)
+            # 세로 높이를 900px로 확장
+            st.dataframe(pigs, height=900, use_container_width=True)
 
     except Exception as e:
         st.error(f"파일을 읽는 도중 오류가 발생했습니다: {e}")
