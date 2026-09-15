@@ -17,7 +17,7 @@ st.set_page_config(page_title="주식회사 잇다 / 자동 배정 및 농가 �
 if 'main_menu' not in st.session_state:
     st.session_state.main_menu = "배정"
 
-# ----------------- 사이드바 메인 메뉴 (메뉴 전환 잔상 방지 처리) -----------------
+# ----------------- 사이드바 메인 메뉴 -----------------
 st.sidebar.title("📌 메인 메뉴")
 
 if st.sidebar.button(
@@ -70,7 +70,7 @@ def get_centered_column_config(df):
             config[col] = st.column_config.Column(col, alignment="center")
     return config
 
-# ----------------- 파일 업로드 및 실시간 엑셀 읽기 연산 -----------------
+# ----------------- 파일 업로드 시에만 데이터 동적 파싱 -----------------
 if uploaded_grade:
     try:
         raw_df = pd.read_excel(uploaded_grade, header=None)
@@ -495,13 +495,12 @@ if st.session_state.main_menu == "배정":
             st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
 
 # ==============================================================================
-# [메뉴 2] 농가 분석 (실제 업로드 엑셀 데이터 동적 연산)
+# [메뉴 2] 농가 분석 (실제 지육율 수식 = 중량 / 생체 * 100 적용)
 # ==============================================================================
 elif st.session_state.main_menu == "농가분석":
     st.title("📊 농가별 출하 및 스펙 분석")
     
     if 'allocated_pigs' in st.session_state:
-        # 업로드된 실제 엑셀 데이터를 가져와서 농가별 실시간 집계
         pigs_all = st.session_state['allocated_pigs'].copy()
         
         def extract_feed_and_farm(val):
@@ -520,8 +519,13 @@ elif st.session_state.main_menu == "농가분석":
             head_cnt = len(group)
             total_weight = group['중량'].sum()
             
-            dressing_rate = 76.32
-            live_weight = total_weight / (dressing_rate / 100.0)
+            # 대표 지육율 환산 계수로 생체중 수식 역산
+            dressing_rate_val = 76.32
+            live_weight = total_weight / (dressing_rate_val / 100.0)
+            
+            # 실제 지육율 계산 공식: 중량 / 생체중 * 100
+            real_dressing_rate = (total_weight / live_weight * 100) if live_weight > 0 else 0.0
+
             avg_live_weight = live_weight / head_cnt if head_cnt > 0 else 0
             avg_carcass_weight = total_weight / head_cnt if head_cnt > 0 else 0
             avg_fat = group['등지방'].mean()
@@ -556,7 +560,7 @@ elif st.session_state.main_menu == "농가분석":
                 '생체평균': f"{avg_live_weight:.2f}",
                 '도체 kg': f"{avg_carcass_weight:.1f}",
                 '등지방 mm': f"{avg_fat:.1f}",
-                '지육율': f"{dressing_rate:.2f}%",
+                '지육율': f"{real_dressing_rate:.2f}%",
                 '86~96,19~23': f"{spec_target_cnt:,}",
                 '스펙비율': f"{spec_target_ratio:.1f}%",
                 '암': f"{female_cnt:,}",
@@ -571,11 +575,12 @@ elif st.session_state.main_menu == "농가분석":
 
         analysis_df = pd.DataFrame(rows)
 
-        # ----------------- 실시간 총합계 집계 연산 -----------------
+        # ----------------- 총합계 수식 집계 -----------------
         total_head = len(pigs_all)
         total_w = pigs_all['중량'].sum()
-        dressing_rate = 76.32
-        total_live = total_w / (dressing_rate / 100.0)
+        total_live = total_w / (76.32 / 100.0)
+        tot_dressing_rate = (total_w / total_live * 100) if total_live > 0 else 0.0
+
         avg_live_tot = total_live / total_head if total_head > 0 else 0
         avg_carcass_tot = total_w / total_head if total_head > 0 else 0
         avg_fat_tot = pigs_all['등지방'].mean()
@@ -610,7 +615,7 @@ elif st.session_state.main_menu == "농가분석":
             '생체평균': f"{avg_live_tot:.2f}",
             '도체 kg': f"{avg_carcass_tot:.1f}",
             '등지방 mm': f"{avg_fat_tot:.1f}",
-            '지육율': '76.32%',
+            '지육율': f"{tot_dressing_rate:.2f}%",
             '86~96,19~23': f"{tot_spec_cnt:,}",
             '스펙비율': f"{tot_spec_ratio:.1f}%",
             '암': f"{tot_female:,}",
@@ -639,7 +644,6 @@ elif st.session_state.main_menu == "농가분석":
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-        # ----------------- 마지막 '합계' 행 스타일링 (깨지는 문구 없이 진짜 볼드체 적용) -----------------
         def style_total_row(row):
             if row['농가'] == '합계':
                 return ['font-weight: bold; background-color: #f1f3f5;'] * len(row)
@@ -647,7 +651,6 @@ elif st.session_state.main_menu == "농가분석":
 
         styled_df = final_analysis_df.style.apply(style_total_row, axis=1)
 
-        # 빈 행 없이 딱 맞춘 높이 연산
         calc_height = (len(final_analysis_df) + 1) * 36 + 5
 
         st.dataframe(
