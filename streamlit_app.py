@@ -13,12 +13,31 @@ except ImportError:
 
 st.set_page_config(page_title="주식회사 잇다 / 자동 배정 및 농가 분석 시스템", layout="wide", page_icon="🐖")
 
-# ----------------- 사이드바 최상위 메뉴 구성 -----------------
+# ----------------- 사이드바 최상위 메뉴 구성 (버튼 세션 관리) -----------------
 st.sidebar.title("📌 메인 메뉴")
-main_menu = st.sidebar.radio(
-    "이동할 메뉴를 선택하세요:",
-    ["1. 🏢 거래처 자동 배정 시스템", "2. 📊 농가 분석"]
-)
+
+if 'main_menu' not in st.session_state:
+    st.session_state.main_menu = "배정"
+
+btn_col1, btn_col2 = st.sidebar.columns(2)
+
+with btn_col1:
+    if st.button(
+        "🏢 1. 거래처 자동 배정", 
+        type="primary" if st.session_state.main_menu == "배정" else "secondary", 
+        use_container_width=True
+    ):
+        st.session_state.main_menu = "배정"
+        st.rerun()
+
+with btn_col2:
+    if st.button(
+        "📊 2. 농가 분석", 
+        type="primary" if st.session_state.main_menu == "농가분석" else "secondary", 
+        use_container_width=True
+    ):
+        st.session_state.main_menu = "농가분석"
+        st.rerun()
 
 # 기본 스펙 데이터 설정
 default_specs = [
@@ -51,7 +70,7 @@ def get_centered_column_config(df):
 # ==============================================================================
 # [메뉴 1] 거래처 자동 배정 시스템
 # ==============================================================================
-if main_menu == "1. 🏢 거래처 자동 배정 시스템":
+if st.session_state.main_menu == "배정":
     st.title("🐖 주식회사 잇다 / 거래처 자동 배정 시스템")
 
     tab1, tab2, tab3, tab4 = st.tabs([
@@ -476,6 +495,6 @@ if main_menu == "1. 🏢 거래처 자동 배정 시스템":
 # ==============================================================================
 # [메뉴 2] 농가 분석 (추가 메뉴)
 # ==============================================================================
-elif main_menu == "2. 📊 농가 분석":
+elif st.session_state.main_menu == "농가분석":
     st.title("📊 농가별 출하 및 스펙 분석")
     st.info("💡 농가 분석 기능이 여기에 구성될 예정입니다.")
