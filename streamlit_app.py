@@ -101,7 +101,6 @@ with tab1:
             pigs['배정거래처'] = '미배정'
 
             # ----------------- 비율 기반 배정 로직 -----------------
-            # 1단계: 스펙 100% 매칭 소진
             for spec in specs:
                 company = spec['업체명']
                 
@@ -126,7 +125,6 @@ with tab1:
                         pigs.loc[matched_c.index, '배정거래처'] = company
                         pigs.loc[matched_f.index, '배정거래처'] = company
 
-            # 2단계: 스펙 유사도 유연 소진 (약 105두 잔여시 중단)
             for spec in specs:
                 unassigned_cnt = len(pigs[pigs['배정거래처'] == '미배정'])
                 if unassigned_cnt <= 105:
@@ -141,13 +139,12 @@ with tab1:
                     matched_relaxed = candidates.sort_values('score').head(15)
                     pigs.loc[matched_relaxed.index, '배정거래처'] = spec['업체명']
 
-            # 남아있는 잔여 물량을 전남지사(잇다)로 최종 할당
             unassigned_mask = pigs['배정거래처'] == '미배정'
             pigs.loc[unassigned_mask, '배정거래처'] = '전남지사(잇다)'
 
             st.session_state['allocated_pigs'] = pigs
 
-            # ----------------- 좌측 배정요약 표 -----------------
+            # ----------------- 좌측 배정요약 표 (가운데 정렬 적용) -----------------
             summary = pigs.groupby(['배정거래처', '성별']).size().unstack(fill_value=0)
             if '거세' not in summary.columns: summary['거세'] = 0
             if '암' not in summary.columns: summary['암'] = 0
@@ -156,9 +153,12 @@ with tab1:
             summary['합계'] = summary['거세'] + summary['암']
             summary.columns.name = None
 
+            # 가운데 정렬 스타일링
+            styled_summary = summary.style.set_properties(**{'text-align': 'center'})
+
             st.sidebar.markdown("---")
             st.sidebar.subheader("📊 거래처별 배정 요약")
-            st.sidebar.dataframe(summary, use_container_width=True, height=500)
+            st.sidebar.dataframe(styled_summary, use_container_width=True, height=500)
 
             # ----------------- 상단 지표 -----------------
             total_pigs = len(pigs)
@@ -210,14 +210,14 @@ with tab1:
     else:
         st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]만 올려주시면 바로 배정됩니다.")
 
-# ----------------- 탭 2: 거래처별 배정 상세 (ㄱㄴㄷ순 나열 UI) -----------------
+# ----------------- 탭 2: 거래처별 배정 상세 (밑줄 제거 및 스타일 반영) -----------------
 with tab2:
     st.subheader("🏢 거래처별 개별 배정 내역 및 명단")
     
     if 'allocated_pigs' in st.session_state:
         pigs_all = st.session_state['allocated_pigs']
         
-        # ㄱㄴㄷ 가나다순 정렬
+        # 신규 등록 업체 포함 ㄱㄴㄷ 가나다순 정렬
         company_list = sorted([c for c in pigs_all['배정거래처'].unique() if c != '전남지사(잇다)'])
         
         if company_list:
@@ -226,11 +226,9 @@ with tab2:
 
             st.write("👉 **조회할 거래처를 클릭하세요 (가나다순 정렬):**")
             
-            # 가나다순으로 한 줄에 여러 개 버튼 배치
             cols = st.columns(min(len(company_list), 6))
             for idx, comp in enumerate(company_list):
                 col_idx = idx % 6
-                # 선택된 거래처에 눈에 띄는 표시
                 is_selected = (comp == st.session_state.selected_company)
                 label = f"📌 {comp}" if is_selected else comp
                 btn_type = "primary" if is_selected else "secondary"
@@ -242,7 +240,8 @@ with tab2:
             st.markdown("---")
             
             selected_company = st.session_state.selected_company
-            st.markdown(f"### <u>**[{selected_company}] 배정 명단**</u>", unsafe_allow_html=True)
+            # 밑줄 제거한 제목
+            st.markdown(f"### **[{selected_company}] 배정 명단**")
 
             comp_df = pigs_all[pigs_all['배정거래처'] == selected_company].copy()
             comp_df.reset_index(drop=True, inplace=True)
@@ -262,7 +261,6 @@ with tab2:
             
             st.markdown(" ")
             
-            # 개별 거래처 엑셀 다운로드
             output_comp = io.BytesIO()
             with pd.ExcelWriter(output_comp, engine='openpyxl') as writer:
                 comp_df.to_excel(writer, sheet_name=selected_company)
@@ -326,11 +324,12 @@ with tab4:
                 else:
                     st.write(f"### 📌 {target_tab} 배정 이력")
                     summary_hist = hist_df.groupby(['배정거래처', '성별']).size().unstack(fill_value=0)
+                    styled_hist = summary_hist.style.set_properties(**{'text-align': 'center'})
                     
                     c1, c2 = st.columns([1, 2])
                     with c1:
                         st.write("**거래처별 요약**")
-                        st.dataframe(summary_hist, use_container_width=True)
+                        st.dataframe(styled_hist, use_container_width=True)
                     with c2:
                         st.write("**상세 개체 내역**")
                         st.dataframe(hist_df, height=600, use_container_width=True)
