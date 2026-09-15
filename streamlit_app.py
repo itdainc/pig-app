@@ -25,16 +25,18 @@ if st.sidebar.button(
     type="primary" if st.session_state.main_menu == "배정" else "secondary", 
     use_container_width=True
 ):
-    st.session_state.main_menu = "배정"
-    st.rerun()
+    if st.session_state.main_menu != "배정":
+        st.session_state.main_menu = "배정"
+        st.rerun()
 
 if st.sidebar.button(
     "📊 2. 농가 분석", 
     type="primary" if st.session_state.main_menu == "농가분석" else "secondary", 
     use_container_width=True
 ):
-    st.session_state.main_menu = "농가분석"
-    st.rerun()
+    if st.session_state.main_menu != "농가분석":
+        st.session_state.main_menu = "농가분석"
+        st.rerun()
 
 st.sidebar.markdown("---")
 st.sidebar.header("📁 파일 업로드")
@@ -68,7 +70,7 @@ def get_centered_column_config(df):
             config[col] = st.column_config.Column(col, alignment="center")
     return config
 
-# ----------------- 파일이 업로드 되면 엑셀 데이터 파싱 및 배정 실행 -----------------
+# ----------------- 파일 업로드 시에만 데이터 동적 파싱 -----------------
 if uploaded_grade:
     try:
         raw_df = pd.read_excel(uploaded_grade, header=None)
@@ -225,12 +227,6 @@ if uploaded_grade:
 
     except Exception as e:
         st.error(f"파일 처리 중 오류가 발생했습니다: {e}")
-else:
-    # 파일이 업로드되어 있지 않으면 세션 비우기
-    if 'allocated_pigs' in st.session_state:
-        del st.session_state['allocated_pigs']
-    if 'specs_dict' in st.session_state:
-        del st.session_state['specs_dict']
 
 # ==============================================================================
 # [메뉴 1] 거래처 자동 배정 시스템
@@ -523,8 +519,11 @@ elif st.session_state.main_menu == "농가분석":
             head_cnt = len(group)
             total_weight = group['중량'].sum()
             
+            # 대표 지육율 환산 계수로 생체중 수식 역산
             dressing_rate_val = 76.32
             live_weight = total_weight / (dressing_rate_val / 100.0)
+            
+            # 실제 지육율 계산 공식: 중량 / 생체중 * 100
             real_dressing_rate = (total_weight / live_weight * 100) if live_weight > 0 else 0.0
 
             avg_live_weight = live_weight / head_cnt if head_cnt > 0 else 0
@@ -576,6 +575,7 @@ elif st.session_state.main_menu == "농가분석":
 
         analysis_df = pd.DataFrame(rows)
 
+        # ----------------- 총합계 수식 집계 -----------------
         total_head = len(pigs_all)
         total_w = pigs_all['중량'].sum()
         total_live = total_w / (76.32 / 100.0)
