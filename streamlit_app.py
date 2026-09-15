@@ -45,10 +45,10 @@ if 'spec_df' not in st.session_state:
 def get_centered_column_config(df):
     config = {}
     for col in df.columns:
-        config[col] = st.column_config.Column(
-            col,
-            alignment="center"
-        )
+        if col == "우선순위":
+            config[col] = st.column_config.Column(col, alignment="center", width="small")
+        else:
+            config[col] = st.column_config.Column(col, alignment="center")
     return config
 
 # ----------------- 탭 구성 -----------------
@@ -62,15 +62,15 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 
 # ----------------- 탭 1: 거래처 스펙 관리 -----------------
 with tab1:
-    st.subheader("⚙️ 거래처 스펙 관리 (우선순위 / 목표두수 / 배제농가 설정)")
-    st.write("표 안의 셀을 클릭하여 숫자를 수정하거나 항목을 추가/삭제할 수 있습니다. (우선순위 숫자가 작을수록 먼저 배정됩니다)")
+    st.subheader("⚙️ 거래처 스펙 관리")
 
     edited_df = st.data_editor(
         st.session_state.spec_df,
         num_rows="dynamic",
         use_container_width=True,
         height=600,
-        key="spec_editor"
+        key="spec_editor",
+        column_config=get_centered_column_config(st.session_state.spec_df)
     )
 
     if st.button("💾 구글 시트에 스펙 변경사항 저장", use_container_width=False):
@@ -352,7 +352,6 @@ with tab3:
                 selected_company = st.session_state.selected_company
                 st.markdown(f"### **[{selected_company}] 배정 명단**")
 
-                # 스펙 안내 커스텀 회색 박스 (이모티콘 제거, 밝은 회색 배경, 깔끔한 문구)
                 spec = specs_dict.get(selected_company, None)
                 if spec:
                     ex_farm_info = f" | 배제농가: {', '.join(spec['배제농가'])}" if spec['배제농가'] else ""
