@@ -23,7 +23,6 @@ if check_password():
     if 'main_menu' not in st.session_state:
         st.session_state.main_menu = "배정"
 
-    # 사이드바
     st.sidebar.title("📌 메인 메뉴")
 
     if st.sidebar.button("🏢 1. 거래처 자동 배정 시스템", type="primary" if st.session_state.main_menu == "배정" else "secondary", use_container_width=True):
@@ -55,7 +54,7 @@ if check_password():
                 config[col] = st.column_config.Column(col, alignment="center")
         return config
 
-    # 파일 업로드 시 연동 엔진 실행 (백그라운드 스펙 반영)
+    # 파일 업로드 시 연동 엔진 실행
     if uploaded_grade:
         try:
             pigs, specs_dict = allocate_pigs_data(uploaded_grade, pd.DataFrame(DEFAULT_SPECS))
@@ -65,12 +64,11 @@ if check_password():
             st.error(f"파일 처리 중 오류가 발생했습니다: {e}")
 
     # ==============================================================================
-    # [메뉴 1] 거래처 자동 배정 시스템 (스펙 관리 탭 삭제됨)
+    # [메뉴 1] 거래처 자동 배정 시스템
     # ==============================================================================
     if st.session_state.main_menu == "배정":
         st.title("🐖 주식회사 잇다 / 거래처 자동 배정 시스템")
 
-        # 스펙 관리 탭 제거하고 3개 탭으로 구성
         tab1, tab2, tab3 = st.tabs(["🚀 자동 배정 실행", "🏢 거래처별 배정 상세", "🚚 잇다 배정"])
 
         # ----------------- 탭 1: 자동 배정 실행 -----------------
@@ -110,17 +108,27 @@ if check_password():
                     )
 
                     display_df = pigs[['도체번호', '성별', '중량', '등지방', '등급', '배정거래처', '이력번호', '출하농가']].copy()
-                    st.dataframe(display_df, height=1500, use_container_width=True, column_config=get_centered_column_config(display_df))
+                    st.dataframe(display_df, height=(len(display_df) + 1) * 35 + 5, use_container_width=True, column_config=get_centered_column_config(display_df))
             else:
                 st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
 
-        # ----------------- 탭 2: 거래처별 배정 상세 -----------------
+        # ----------------- 탭 2: 거래처별 배정 상세 (서브 스펙 위아래 분리 및 빈칸 제거) -----------------
         with tab2:
             st.subheader("🏢 거래처별 개별 배정 내역 및 명단")
             if 'allocated_pigs' in st.session_state and 'specs_dict' in st.session_state:
                 pigs_all = st.session_state['allocated_pigs']
                 specs_dict = st.session_state['specs_dict']
-                company_list = sorted([c for c in pigs_all['배정거래처'].unique() if c != '잇다'])
+                
+                # '승민 1', '승민 2' -> 대표명 '승민'으로 그룹화
+                all_assigned = [c for c in pigs_all['배정거래처'].unique() if c != '잇다']
+                main_company_map = {}
+                for c in all_assigned:
+                    base_name = c.split()[0]
+                    if base_name not in main_company_map:
+                        main_company_map[base_name] = []
+                    main_company_map[base_name].append(c)
+
+                company_list = sorted(list(main_company_map.keys()))
                 
                 if company_list:
                     if 'selected_company' not in st.session_state or st.session_state.selected_company not in company_list:
@@ -136,53 +144,61 @@ if check_password():
                             st.rerun()
 
                     st.markdown("---")
-                    selected_company = st.session_state.selected_company
-                    st.markdown(f"### **[{selected_company}] 배정 명단**")
+                    selected_main = st.session_state.selected_company
+                    sub_companies = sorted(main_company_map[selected_main])
 
-                    spec = specs_dict.get(selected_company, None)
-                    if spec:
-                        ex_farm_info = f" | 배제농가: {', '.join(spec['배제농가'])}" if spec['배제농가'] else ""
-                        st.markdown(f"""
-                        <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 10px 15px; font-size: 14px; color: #495057; margin-bottom: 15px;">
-                            <strong>목표두수:</strong> {spec['목표두수']}두 | <strong>중량:</strong> {spec['weight_str']} kg | <strong>등지방:</strong> {spec['fat_str']} mm | <strong>등급:</strong> {spec['grade_str']} | <strong>암 비율:</strong> {spec['f_ratio_str']}{ex_farm_info}
-                        </div>
-                        """, unsafe_allow_html=True)
+                    # 대표 거래처에 속하는 서브 스펙별로 위아래 표 출력
+                    for sub_comp in sub_companies:
+                        st.markdown(f"### **[{sub_comp}] 배정 명단**")
 
-                    comp_df = pigs_all[pigs_all['배정거래처'] == selected_company].copy()
-                    comp_df.reset_index(drop=True, inplace=True)
-                    comp_df.index = comp_df.index + 1
+                        spec = specs_dict.get(sub_comp, None)
+                        if spec:
+                            ex_farm_info = f" | 배제농가: {', '.join(spec['배제농가'])}" if spec['배제농가'] else ""
+                            st.markdown(f"""
+                            <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 10px 15px; font-size: 14px; color: #495057; margin-bottom: 15px;">
+                                <strong>목표두수:</strong> {spec['목표두수']}두 | <strong>중량:</strong> {spec['weight_str']} kg | <strong>등지방:</strong> {spec['fat_str']} mm | <strong>등급:</strong> {spec['grade_str']} | <strong>암 비율:</strong> {spec['f_ratio_str']}{ex_farm_info}
+                            </div>
+                            """, unsafe_allow_html=True)
 
-                    remarks = []
-                    for idx, row in comp_df.iterrows():
-                        if not spec: remarks.append("-"); continue
-                        diffs = []
-                        if row['중량'] < spec['w_min']: diffs.append(f"중량미달({row['중량']}kg < {spec['w_min']}kg)")
-                        elif row['중량'] > spec['w_max']: diffs.append(f"중량초과({row['중량']}kg > {spec['w_max']}kg)")
-                        if row['등지방'] < spec['f_min']: diffs.append(f"등지방미달({row['등지방']}mm < {spec['f_min']}mm)")
-                        elif row['등지방'] > spec['f_max']: diffs.append(f"등지방초과({row['등지방']}mm > {spec['f_max']}mm)")
-                        if spec['grades'] and str(row['등급']).strip() not in spec['grades']: diffs.append(f"등급불일치({row['등급']})")
-                        if spec['배제농가'] and any(farm in str(row['출하농가']) for farm in spec['배제농가']): diffs.append(f"배제농가포함({row['출하농가']})")
-                        remarks.append(",\n".join(diffs) if diffs else "스펙일치")
+                        comp_df = pigs_all[pigs_all['배정거래처'] == sub_comp].copy()
+                        comp_df.reset_index(drop=True, inplace=True)
+                        comp_df.index = comp_df.index + 1
 
-                    comp_df['비고'] = remarks
-                    c_cnt = len(comp_df[comp_df['성별'] == '거세'])
-                    f_cnt = len(comp_df[comp_df['성별'] == '암'])
-                    
-                    m1, m2, m3, m4, m5 = st.columns(5)
-                    m1.metric("총 배정 수량", f"{len(comp_df)} 두")
-                    m2.metric("거세 수량", f"{c_cnt} 두")
-                    m3.metric("암 수량", f"{f_cnt} 두")
-                    m4.metric("평균 중량", f"{comp_df['중량'].mean():.1f} kg" if not comp_df.empty else "0 kg")
-                    m5.metric("평균 등지방", f"{comp_df['등지방'].mean():.1f} mm" if not comp_df.empty else "0 mm")
-                    
-                    st.markdown(" ")
-                    output_comp = io.BytesIO()
-                    with pd.ExcelWriter(output_comp, engine='openpyxl') as writer: comp_df.to_excel(writer, sheet_name=selected_company)
-                    
-                    st.download_button(label=f"📥 [{selected_company}] 배정 명단 엑셀 다운로드", data=output_comp.getvalue(), file_name=f"{selected_company}_배정명단.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                    
-                    comp_display = comp_df[['도체번호', '성별', '중량', '등지방', '등급', '비고', '이력번호', '출하농가']].copy()
-                    st.dataframe(comp_display, height=1500, use_container_width=True, column_config=get_centered_column_config(comp_display))
+                        remarks = []
+                        for idx, row in comp_df.iterrows():
+                            if not spec: remarks.append("-"); continue
+                            diffs = []
+                            if row['중량'] < spec['w_min']: diffs.append(f"중량미달({row['중량']}kg < {spec['w_min']}kg)")
+                            elif row['중량'] > spec['w_max']: diffs.append(f"중량초과({row['중량']}kg > {spec['w_max']}kg)")
+                            if row['등지방'] < spec['f_min']: diffs.append(f"등지방미달({row['등지방']}mm < {spec['f_min']}mm)")
+                            elif row['등지방'] > spec['f_max']: diffs.append(f"등지방초과({row['등지방']}mm > {spec['f_max']}mm)")
+                            if spec['grades'] and str(row['등급']).strip() not in spec['grades']: diffs.append(f"등급불일치({row['등급']})")
+                            if spec['배제농가'] and any(farm in str(row['출하농가']) for farm in spec['배제농가']): diffs.append(f"배제농가포함({row['출하농가']})")
+                            remarks.append(",\n".join(diffs) if diffs else "스펙일치")
+
+                        comp_df['비고'] = remarks
+                        c_cnt = len(comp_df[comp_df['성별'] == '거세'])
+                        f_cnt = len(comp_df[comp_df['성별'] == '암'])
+                        
+                        m1, m2, m3, m4, m5 = st.columns(5)
+                        m1.metric("총 배정 수량", f"{len(comp_df)} 두")
+                        m2.metric("거세 수량", f"{c_cnt} 두")
+                        m3.metric("암 수량", f"{f_cnt} 두")
+                        m4.metric("평균 중량", f"{comp_df['중량'].mean():.1f} kg" if not comp_df.empty else "0 kg")
+                        m5.metric("평균 등지방", f"{comp_df['등지방'].mean():.1f} mm" if not comp_df.empty else "0 mm")
+                        
+                        st.markdown(" ")
+                        output_comp = io.BytesIO()
+                        with pd.ExcelWriter(output_comp, engine='openpyxl') as writer: comp_df.to_excel(writer, sheet_name=sub_comp)
+                        
+                        st.download_button(label=f"📥 [{sub_comp}] 배정 명단 엑셀 다운로드", data=output_comp.getvalue(), file_name=f"{sub_comp}_배정명단.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                        
+                        comp_display = comp_df[['도체번호', '성별', '중량', '등지방', '등급', '비고', '이력번호', '출하농가']].copy()
+                        
+                        # 표 아래 빈칸 없도록 정확한 행 높이 지정
+                        calc_height = (len(comp_display) + 1) * 35 + 10
+                        st.dataframe(comp_display, height=calc_height, use_container_width=True, column_config=get_centered_column_config(comp_display))
+                        st.markdown("<br>", unsafe_allow_html=True)
             else:
                 st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
 
@@ -214,7 +230,8 @@ if check_password():
                     today_str = datetime.now().strftime("%m%d")
                     
                     st.download_button(label=f"📥 잇다 전달용 엑셀 다운로드 ({today_str} 잇다.xlsx)", data=output_jn.getvalue(), file_name=f"{today_str} 잇다.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                    st.dataframe(jn_export, height=1200, use_container_width=True, column_config=get_centered_column_config(jn_export))
+                    calc_jn_height = (len(jn_export) + 1) * 35 + 10
+                    st.dataframe(jn_export, height=calc_jn_height, use_container_width=True, column_config=get_centered_column_config(jn_export))
             else:
                 st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
 
@@ -289,6 +306,7 @@ if check_password():
             st.download_button(label="📥 농가분석 결과 엑셀 다운로드", data=output_anal.getvalue(), file_name=f"농가분석_{datetime.now().strftime('%Y%m%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
             styled_df = final_analysis_df.style.apply(lambda row: ['font-weight: bold; background-color: #f1f3f5;'] * len(row) if row['농가'] == '합계' else [''] * len(row), axis=1)
             
-            st.dataframe(styled_df, height=(len(final_analysis_df) + 1) * 36 + 5, use_container_width=True, hide_index=True, column_config=get_centered_column_config(final_analysis_df))
+            calc_height = (len(final_analysis_df) + 1) * 35 + 10
+            st.dataframe(styled_df, height=calc_height, use_container_width=True, hide_index=True, column_config=get_centered_column_config(final_analysis_df))
         else:
             st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드하시면 농가 분석 결과가 즉시 생성됩니다.")
