@@ -25,18 +25,16 @@ if st.sidebar.button(
     type="primary" if st.session_state.main_menu == "배정" else "secondary", 
     use_container_width=True
 ):
-    if st.session_state.main_menu != "배정":
-        st.session_state.main_menu = "배정"
-        st.rerun()
+    st.session_state.main_menu = "배정"
+    st.rerun()
 
 if st.sidebar.button(
     "📊 2. 농가 분석", 
     type="primary" if st.session_state.main_menu == "농가분석" else "secondary", 
     use_container_width=True
 ):
-    if st.session_state.main_menu != "농가분석":
-        st.session_state.main_menu = "농가분석"
-        st.rerun()
+    st.session_state.main_menu = "농가분석"
+    st.rerun()
 
 st.sidebar.markdown("---")
 st.sidebar.header("📁 파일 업로드")
@@ -70,7 +68,7 @@ def get_centered_column_config(df):
             config[col] = st.column_config.Column(col, alignment="center")
     return config
 
-# ----------------- 파일 업로드 시 동적 파싱 및 배정 로직 -----------------
+# ----------------- 파일 업로드 시에만 계산 후 세션 저장 (메뉴 이동 시 유지) -----------------
 if uploaded_grade:
     try:
         raw_df = pd.read_excel(uploaded_grade, header=None)
@@ -139,7 +137,7 @@ if uploaded_grade:
             prio = int(row['우선순위']) if pd.notna(row['우선순위']) else 99
             base_target = int(row['목표두수']) if pd.notna(row['목표두수']) else 0
             
-            # 목표두수 ±10% 허용범위 설정
+            # 목표두수 ±10% 허용범위 적용
             max_target = int(round(base_target * 1.10)) if base_target > 0 else 0
             
             weight_str = str(row['중량(kg)'])
@@ -174,7 +172,7 @@ if uploaded_grade:
 
         pigs['배정거래처'] = '미배정'
 
-        # 1차 배정: 목표두수 (+10% 상한선 적용)
+        # 1차 배정: 거래처별 최대목표두수(+10%) 내 선배정
         for spec in specs:
             company = spec['업체명']
             target = spec['최대목표두수']
@@ -223,12 +221,12 @@ if uploaded_grade:
                     matched_relaxed = candidates.sort_values('score').head(needed)
                     pigs.loc[matched_relaxed.index, '배정거래처'] = company
 
-        # 잔여 물량 기본 배정: '잇다' (최대 110두 제한)
+        # 잇다 최대 110두 제한 배정
         unassigned_indices = pigs[pigs['배정거래처'] == '미배정'].index
-        ita_indices = unassigned_indices[:110] # 최대 110두까지
+        ita_indices = unassigned_indices[:110]
         pigs.loc[ita_indices, '배정거래처'] = '잇다'
 
-        # 110두 초과 잔여기체 발생 시 추가 흡수
+        # 110두 넘는 추가 잔여분 일반 거래처 재할당
         over_indices = unassigned_indices[110:]
         if len(over_indices) > 0:
             for spec in specs:
@@ -241,7 +239,6 @@ if uploaded_grade:
                     pigs.loc[assign_now, '배정거래처'] = comp
                     over_indices = over_indices[rem_needed:]
 
-            # 완벽 미배정 건 최종 정리
             pigs.loc[pigs['배정거래처'] == '미배정', '배정거래처'] = '잇다'
 
         st.session_state['allocated_pigs'] = pigs
@@ -280,7 +277,7 @@ if st.session_state.main_menu == "배정":
 
     # ----------------- 탭 2: 자동 배정 실행 -----------------
     with tab2:
-        if 'allocated_pigs' in st.session_state and uploaded_grade:
+        if 'allocated_pigs' in st.session_state:
             pigs = st.session_state['allocated_pigs']
 
             total_pigs = len(pigs)
@@ -298,7 +295,7 @@ if st.session_state.main_menu == "배정":
             with col_main:
                 st.subheader("📋 전체 개체별 세부 배정 내역")
                 
-                today_tab_name = datetime.now().strftime("%Y-%m-%d")
+                today_str = datetime.now().strftime("%Y-%m-%d")
                 
                 summary = pigs.groupby(['배정거래처', '성별']).size().unstack(fill_value=0)
                 if '거세' not in summary.columns: summary['거세'] = 0
@@ -315,7 +312,7 @@ if st.session_state.main_menu == "배정":
                 st.download_button(
                     label="📥 전체 배정 결과 엑셀 다운로드",
                     data=processed_data,
-                    file_name=f"돼지배정결과_{today_tab_name}.xlsx",
+                    file_name=f"{today_str}_배정결과.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
 
@@ -333,7 +330,7 @@ if st.session_state.main_menu == "배정":
     with tab3:
         st.subheader("🏢 거래처별 개별 배정 내역 및 명단")
         
-        if 'allocated_pigs' in st.session_state and 'specs_dict' in st.session_state and uploaded_grade:
+        if 'allocated_pigs' in st.session_state and 'specs_dict' in st.session_state:
             pigs_all = st.session_state['allocated_pigs']
             specs_dict = st.session_state['specs_dict']
             
@@ -452,7 +449,7 @@ if st.session_state.main_menu == "배정":
     with tab4:
         st.subheader("🚚 잇다 배정")
         
-        if 'allocated_pigs' in st.session_state and uploaded_grade:
+        if 'allocated_pigs' in st.session_state:
             pigs_all = st.session_state['allocated_pigs']
             jn_df = pigs_all[pigs_all['배정거래처'] == '잇다'].copy()
             
@@ -517,12 +514,12 @@ if st.session_state.main_menu == "배정":
             st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
 
 # ==============================================================================
-# [메뉴 2] 농가 분석 (업로드된 파일 기반 집계 연산)
+# [메뉴 2] 농가 분석
 # ==============================================================================
 elif st.session_state.main_menu == "농가분석":
     st.title("📊 농가별 출하 및 스펙 분석")
     
-    if 'allocated_pigs' in st.session_state and uploaded_grade:
+    if 'allocated_pigs' in st.session_state:
         pigs_all = st.session_state['allocated_pigs'].copy()
         
         def extract_feed_and_farm(val):
