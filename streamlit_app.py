@@ -71,20 +71,23 @@ if check_password():
             "🚚 잇다 배정"
         ])
 
-        # ----------------- 탭 1: 자동 배정 실행 (수량 조정 접이식 모달 포함) -----------------
+        # ----------------- 탭 1: 자동 배정 실행 (높이가 넓어진 접이식 수량 창) -----------------
         with tab1:
             st.subheader("🚀 자동 배정 연산 실행")
             
-            # 수량 조절용 접이식 모달 창 (Expander)
+            # 수량 조절용 접이식 모달 창 (height를 650px로 시원하게 확대)
             with st.expander("✏️ 거래처별 목표두수 / 변동두수 수기 조정 (클릭하여 열기)", expanded=False):
                 st.info("💡 목표 두수에 변동이 있으면 아래 표에서 수량을 직접 수정하거나 새로운 거래처를 추가하세요.")
                 edited_target_df = st.data_editor(
                     st.session_state.target_df,
                     num_rows="dynamic",
                     use_container_width=True,
-                    height=350,
+                    height=650,  # <-- 클릭 시 한눈에 보기 편하게 높이 대폭 확대!
                     key="target_editor",
-                    column_config={"거래처명": st.column_config.Column("거래처명", alignment="center"), "목표두수": st.column_config.Column("목표두수", alignment="center")}
+                    column_config={
+                        "거래처명": st.column_config.Column("거래처명", alignment="center"), 
+                        "목표두수": st.column_config.Column("목표두수", alignment="center")
+                    }
                 )
                 if st.button("💾 두수 변동사항 적용", type="secondary", use_container_width=True):
                     st.session_state.target_df = edited_target_df
