@@ -4,16 +4,9 @@ import io
 import numpy as np
 from datetime import datetime
 
-st.set_page_config(page_title="도축 스펙 거래처 자동 배정", layout="wide", page_icon="🐖")
+st.set_page_config(page_title="주식회사 잇다 / 거래처 자동 배정 시스템", layout="wide", page_icon="🐖")
 
-st.title("🐖 돼지 도축 스펙 거래처 자동 배정 시스템")
-
-# ----------------- 구글 시트 연동 -----------------
-try:
-    from streamlit_gsheets import GSheetsConnection
-    conn = st.connection("gsheets", type=GSheetsConnection)
-except Exception:
-    conn = None
+st.title("🐖 주식회사 잇다 / 거래처 자동 배정 시스템")
 
 # 기본 스펙 데이터 설정
 default_specs = [
@@ -31,16 +24,8 @@ default_specs = [
     {"업체명": "프라임미트", "우선순위": 4, "목표두수": 110, "지급률": "104.5%", "중량(kg)": "80~103", "등지방(mm)": "20~34", "등급": "1,1+,2", "암 비율": "70%", "외관": "", "육질": "", "결함": "", "배제농가": ""}
 ]
 
-try:
-    if conn:
-        spec_df = conn.read(worksheet="스펙", ttl="1m")
-    else:
-        raise Exception("연동 미설정")
-except Exception:
-    spec_df = pd.DataFrame(default_specs)
-
 if 'spec_df' not in st.session_state:
-    st.session_state.spec_df = spec_df
+    st.session_state.spec_df = pd.DataFrame(default_specs)
 
 def get_centered_column_config(df):
     config = {}
@@ -51,12 +36,11 @@ def get_centered_column_config(df):
             config[col] = st.column_config.Column(col, alignment="center")
     return config
 
-# ----------------- 탭 구성 -----------------
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+# ----------------- 탭 구성 (총 4개 탭) -----------------
+tab1, tab2, tab3, tab4 = st.tabs([
     "⚙️ 거래처 스펙 관리", 
     "🚀 자동 배정 실행", 
     "🏢 거래처별 배정 상세",
-    "📅 배정 이력 조회 (구글 시트)",
     "🚚 잇다 배정"
 ])
 
@@ -73,16 +57,7 @@ with tab1:
         column_config=get_centered_column_config(st.session_state.spec_df)
     )
 
-    if st.button("💾 구글 시트에 스펙 변경사항 저장", use_container_width=False):
-        try:
-            if conn is None:
-                raise Exception("Secrets 필요")
-            conn.update(worksheet="스펙", data=edited_df)
-            st.session_state.spec_df = edited_df
-            st.success("거래처 스펙 변경 사항이 구글 시트 ['스펙'] 탭에 성공적으로 동기화되었습니다!")
-        except Exception:
-            st.session_state.spec_df = edited_df
-            st.success("스펙이 임시 반영되었습니다.")
+    st.session_state.spec_df = edited_df
 
 # ----------------- 탭 2: 자동 배정 실행 -----------------
 with tab2:
@@ -280,30 +255,18 @@ with tab2:
                 
                 today_tab_name = datetime.now().strftime("%Y-%m-%d")
                 
-                col_btn_save, col_btn_dl = st.columns([1, 1])
-                with col_btn_save:
-                    if st.button(f"☁️ 구글 시트로 당일({today_tab_name}) 탭 생성 및 저장"):
-                        try:
-                            if conn is None:
-                                raise Exception("구글 시트 연동 설정 필요")
-                            conn.update(worksheet=today_tab_name, data=pigs)
-                            st.success(f"✅ 구글 시트에 [{today_tab_name}] 탭이 생성되고 저장되었습니다!")
-                        except Exception as e:
-                            st.error(f"구글 시트 저장 실패: Secrets 설정을 진행해 주세요. ({e})")
-
-                with col_btn_dl:
-                    output = io.BytesIO()
-                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                        pigs.to_excel(writer, sheet_name='전체배정내역')
-                        summary.to_excel(writer, sheet_name='요약')
-                    processed_data = output.getvalue()
-                    
-                    st.download_button(
-                        label="📥 전체 배정 결과 엑셀 다운로드",
-                        data=processed_data,
-                        file_name=f"돼지배정결과_{today_tab_name}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    pigs.to_excel(writer, sheet_name='전체배정내역')
+                    summary.to_excel(writer, sheet_name='요약')
+                processed_data = output.getvalue()
+                
+                st.download_button(
+                    label="📥 전체 배정 결과 엑셀 다운로드",
+                    data=processed_data,
+                    file_name=f"돼지배정결과_{today_tab_name}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
 
                 display_df = pigs[['도체번호', '성별', '중량', '등지방', '등급', '배정거래처', '이력번호', '출하농가']].copy()
                 st.dataframe(
@@ -437,51 +400,8 @@ with tab3:
     else:
         st.info("👈 [🚀 자동 배정 실행] 탭에서 등급판정 파일을 먼저 업로드해 주세요.")
 
-# ----------------- 탭 4: 배정 이력 조회 -----------------
+# ----------------- 탭 4: 잇다 배정 -----------------
 with tab4:
-    st.subheader("📅 구글 시트 날짜별(탭별) 배정 이력 조회")
-    try:
-        if conn is None:
-            raise Exception("Secrets 필요")
-        
-        search_date = st.date_input("조회하고 싶은 날짜 선택", datetime.now())
-        target_tab = search_date.strftime("%Y-%m-%d")
-        
-        if st.button(f"🔍 [{target_tab}] 이력 불러오기"):
-            try:
-                hist_df = conn.read(worksheet=target_tab, ttl="0s")
-                if hist_df.empty:
-                    st.warning(f"[{target_tab}] 탭은 존재하지만 데이터가 없습니다.")
-                else:
-                    st.write(f"### 📌 {target_tab} 배정 이력")
-                    summary_hist = hist_df.groupby(['배정거래처', '성별']).size().unstack(fill_value=0)
-                    summary_hist['합계'] = summary_hist['거세'] + summary_hist['암']
-                    summary_hist = summary_hist[['합계', '거세', '암']]
-                    
-                    c1, c2 = st.columns([1, 2])
-                    with c1:
-                        st.write("**거래처별 요약**")
-                        st.dataframe(
-                            summary_hist, 
-                            use_container_width=True,
-                            column_config=get_centered_column_config(summary_hist)
-                        )
-                    with c2:
-                        st.write("**상세 개체 내역**")
-                        st.dataframe(
-                            hist_df, 
-                            height=800, 
-                            use_container_width=True,
-                            column_config=get_centered_column_config(hist_df)
-                        )
-            except Exception:
-                st.error(f"❌ [{target_tab}] 날짜로 저장된 구글 시트 탭이 없습니다.")
-
-    except Exception:
-        st.info("💡 구글 시트 연동 완료 시 날짜별 이력 조회가 가능합니다.")
-
-# ----------------- 탭 5: 잇다 배정 (요청 사항 반영) -----------------
-with tab5:
     st.subheader("🚚 잇다 배정")
     
     if 'allocated_pigs' in st.session_state:
@@ -495,7 +415,6 @@ with tab5:
             total_jn_count = len(jn_df)
             total_jn_weight = jn_df['중량'].sum()
 
-            # 연회색 박스 배경 + 요청하신 문구 양식 반영 (이모티콘 제거)
             st.markdown(
                 f"""
                 <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 12px 18px; font-size: 15px; color: #333333; margin-bottom: 15px;">
