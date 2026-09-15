@@ -73,7 +73,7 @@ with tab1:
         key="spec_editor"
     )
 
-    if st.button("💾 구글 시트에 스펙 변경사항 저장", type="primary"):
+    if st.button("💾 구글 시트에 스펙 변경사항 저장", use_container_width=False):
         try:
             if conn is None:
                 raise Exception("Secrets 필요")
@@ -282,7 +282,7 @@ with tab2:
                 
                 col_btn_save, col_btn_dl = st.columns([1, 1])
                 with col_btn_save:
-                    if st.button(f"☁️ 구글 시트로 당일({today_tab_name}) 탭 생성 및 저장", type="primary"):
+                    if st.button(f"☁️ 구글 시트로 당일({today_tab_name}) 탭 생성 및 저장"):
                         try:
                             if conn is None:
                                 raise Exception("구글 시트 연동 설정 필요")
@@ -352,10 +352,18 @@ with tab3:
                 selected_company = st.session_state.selected_company
                 st.markdown(f"### **[{selected_company}] 배정 명단**")
 
+                # 스펙 안내 커스텀 회색 박스 (이모티콘 제거, 밝은 회색 배경, 깔끔한 문구)
                 spec = specs_dict.get(selected_company, None)
                 if spec:
-                    ex_farm_info = f" | **배제농가:** {', '.join(spec['배제농가'])}" if spec['배제농가'] else ""
-                    st.info(f"🎯 **[{selected_company}] 설정 스펙** ➔ **우선순위:** {spec['우선순위']}위 | **목표두수:** {spec['목표두수']}두 | **중량:** {spec['weight_str']} kg | **등지방:** {spec['fat_str']} mm | **등급:** {spec['grade_str']} | **암 비율:** {spec['f_ratio_str']}{ex_farm_info}")
+                    ex_farm_info = f" | 배제농가: {', '.join(spec['배제농가'])}" if spec['배제농가'] else ""
+                    st.markdown(
+                        f"""
+                        <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 10px 15px; font-size: 14px; color: #495057; margin-bottom: 15px;">
+                            <strong>목표두수:</strong> {spec['목표두수']}두 | <strong>중량:</strong> {spec['weight_str']} kg | <strong>등지방:</strong> {spec['fat_str']} mm | <strong>등급:</strong> {spec['grade_str']} | <strong>암 비율:</strong> {spec['f_ratio_str']}{ex_farm_info}
+                        </div>
+                        """, 
+                        unsafe_allow_html=True
+                    )
 
                 comp_df = pigs_all[pigs_all['배정거래처'] == selected_company].copy()
                 comp_df.reset_index(drop=True, inplace=True)
@@ -415,8 +423,7 @@ with tab3:
                     label=f"📥 [{selected_company}] 배정 명단 엑셀 다운로드",
                     data=comp_data,
                     file_name=f"{selected_company}_배정명단.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    type="primary"
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
                 
                 comp_display = comp_df[['도체번호', '성별', '중량', '등지방', '등급', '비고', '이력번호', '출하농가']].copy()
@@ -517,8 +524,7 @@ with tab5:
                 label=f"📥 잇다 전달용 엑셀 다운로드 ({today_str} 잇다.xlsx)",
                 data=jn_data,
                 file_name=f"{today_str} 잇다.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="primary"
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
             st.markdown("---")
