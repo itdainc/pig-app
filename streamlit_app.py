@@ -493,7 +493,7 @@ if st.session_state.main_menu == "배정":
             st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
 
 # ==============================================================================
-# [메뉴 2] 농가 분석 (요청해주신 표 이미지 100% 동일 구현)
+# [메뉴 2] 농가 분석 (요청사항 100% 반영: 지육환산 열 삭제, 높이 맞춤)
 # ==============================================================================
 elif st.session_state.main_menu == "농가분석":
     st.title("📊 농가별 출하 및 스펙 분석")
@@ -511,7 +511,6 @@ elif st.session_state.main_menu == "농가분석":
 
         pigs_all[['농가_명', '사료사_명']] = pigs_all['출하농가'].apply(lambda x: pd.Series(extract_feed_and_farm(x)))
 
-        # 농가별 집계 연산
         farm_groups = pigs_all.groupby(['농가_명', '사료사_명'])
         
         rows = []
@@ -519,22 +518,18 @@ elif st.session_state.main_menu == "농가분석":
             head_cnt = len(group)
             total_weight = group['중량'].sum()
             
-            # 지육율 76.3% 기준 생체중 역산
             dressing_rate = 76.32
             live_weight = total_weight / (dressing_rate / 100.0)
             avg_live_weight = live_weight / head_cnt if head_cnt > 0 else 0
             avg_carcass_weight = total_weight / head_cnt if head_cnt > 0 else 0
             avg_fat = group['등지방'].mean()
             
-            # 86~96kg & 19~23mm 스펙 조건
             spec_target = group[(group['중량'] >= 86) & (group['중량'] <= 96) & (group['등지방'] >= 19) & (group['등지방'] <= 23)]
             spec_target_cnt = len(spec_target)
             spec_target_ratio = (spec_target_cnt / head_cnt * 100) if head_cnt > 0 else 0
 
-            # 암 두수
             female_cnt = len(group[group['성별'] == '암'])
 
-            # 등급별 집계 (1+, 1, 2, 등외)
             p_plus = group[group['등급'] == '1+']
             p_1 = group[group['등급'] == '1']
             p_2 = group[group['등급'] == '2']
@@ -558,8 +553,6 @@ elif st.session_state.main_menu == "농가분석":
                 '농가': farm_name,
                 '사료사': feed_name,
                 '두수': head_cnt,
-                '잇다조건 지육환산': '-',
-                '예상 지육환산율(%)': '-',
                 '중량': int(round(total_weight)),
                 '생체': int(round(live_weight)),
                 '생체평균': round(avg_live_weight, 2),
@@ -582,7 +575,7 @@ elif st.session_state.main_menu == "농가분석":
 
         analysis_df = pd.DataFrame(rows)
 
-        # ----------------- 합계 행 계산 -----------------
+        # ----------------- 합계 행 -----------------
         total_head = analysis_df['두수'].sum()
         total_w = analysis_df['중량'].sum()
         total_live = analysis_df['생체'].sum()
@@ -608,8 +601,6 @@ elif st.session_state.main_menu == "농가분석":
             '농가': '합계',
             '사료사': '-',
             '두수': total_head,
-            '잇다조건 지육환산': '#DIV/0!',
-            '예상 지육환산율(%)': '#DIV/0!',
             '중량': total_w,
             '생체': total_live,
             '생체평균': round(avg_live_tot, 2),
@@ -646,9 +637,12 @@ elif st.session_state.main_menu == "농가분석":
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
+        # 행 개수에 맞춰 남는 스크롤 표 없이 딱 들어맞게 세로 높이 자동 계산 (기본 35px * 행수 + 헤더)
+        calc_height = (len(final_analysis_df) + 1) * 38 + 10
+
         st.dataframe(
             final_analysis_df, 
-            height=850, 
+            height=calc_height, 
             use_container_width=True,
             column_config=get_centered_column_config(final_analysis_df)
         )
