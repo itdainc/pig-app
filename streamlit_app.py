@@ -91,7 +91,6 @@ with tab2:
 
     if uploaded_grade:
         try:
-            # 엑셀 헤더 위치 자동 검색
             raw_df = pd.read_excel(uploaded_grade, header=None)
             header_row_idx = 3
             for r_idx in range(min(10, len(raw_df))):
@@ -102,7 +101,6 @@ with tab2:
 
             df_g = pd.read_excel(uploaded_grade, header=header_row_idx)
 
-            # 컬럼명 자동 매칭 로직 (이력번호 오독 완전 방지)
             def find_col(possible_names, default_idx):
                 for col in df_g.columns:
                     col_clean = str(col).replace('\n', '').replace(' ', '')
@@ -119,7 +117,25 @@ with tab2:
             col_fat = find_col(['등지방', '지방두께'], 9)
             col_grade = find_col(['최종등급', '등급'], 22)
             col_farm = find_col(['출하농가', '농가명', '농가'], 21)
-            col_history = find_col(['이력번호', '이력'], 999) # 번호 기반 오독 방지를 위해 지명어 없으면 비움
+            col_history = find_col(['이력번호', '이력'], 999)
+
+            def clean_history_no(val):
+                if pd.isna(val) or val is None:
+                    return ''
+                s_val = str(val).strip()
+                if '.' in s_val:
+                    s_val = s_val.split('.')[0]
+                if s_val in ['nan', 'None', '0']:
+                    return ''
+                return s_val
+
+            def clean_farm_name(val):
+                if pd.isna(val) or val is None:
+                    return ''
+                s_val = str(val).strip()
+                if s_val in ['nan', 'None', '0']:
+                    return ''
+                return s_val
 
             pigs = pd.DataFrame({
                 '도체번호': pd.to_numeric(df_g[col_pig_no], errors='coerce').fillna(0).astype(int) if col_pig_no else 0,
@@ -127,12 +143,9 @@ with tab2:
                 '중량': pd.to_numeric(df_g[col_weight], errors='coerce') if col_weight else 0.0,
                 '등지방': pd.to_numeric(df_g[col_fat], errors='coerce') if col_fat else 0.0,
                 '등급': df_g[col_grade].astype(str).str.strip() if col_grade else '',
-                '출하농가': df_g[col_farm].astype(str).str.strip().replace('nan', '').replace('None', '') if col_farm else '',
-                '이력번호': df_g[col_history].astype(str).str.strip().replace('nan', '').replace('None', '') if col_history else ''
+                '출하농가': df_g[col_farm].apply(clean_farm_name) if col_farm else '',
+                '이력번호': df_g[col_history].apply(clean_history_no) if col_history else ''
             }).dropna(subset=['중량']).copy()
-
-            # 이상한 숫자/소수점 이력번호 필터링 (진짜 이력번호는 12자리 이상 숫자)
-            pigs['이력번호'] = pigs['이력번호'].apply(lambda x: x if len(str(x).replace('.0','')) >= 10 else '')
 
             pigs.reset_index(drop=True, inplace=True)
             pigs.index = pigs.index + 1
@@ -295,7 +308,7 @@ with tab2:
                 display_df = pigs[['도체번호', '성별', '중량', '등지방', '등급', '배정거래처', '이력번호', '출하농가']].copy()
                 st.dataframe(
                     display_df, 
-                    height=750, 
+                    height=1500, 
                     use_container_width=True,
                     column_config=get_centered_column_config(display_df)
                 )
@@ -409,7 +422,7 @@ with tab3:
                 comp_display = comp_df[['도체번호', '성별', '중량', '등지방', '등급', '비고', '이력번호', '출하농가']].copy()
                 st.dataframe(
                     comp_display, 
-                    height=1200, 
+                    height=1500, 
                     use_container_width=True,
                     column_config=get_centered_column_config(comp_display)
                 )
@@ -451,7 +464,7 @@ with tab4:
                         st.write("**상세 개체 내역**")
                         st.dataframe(
                             hist_df, 
-                            height=600, 
+                            height=800, 
                             use_container_width=True,
                             column_config=get_centered_column_config(hist_df)
                         )
@@ -513,7 +526,7 @@ with tab5:
             with col_jn_main:
                 st.dataframe(
                     jn_export, 
-                    height=750, 
+                    height=1200, 
                     use_container_width=True,
                     column_config=get_centered_column_config(jn_export)
                 )
