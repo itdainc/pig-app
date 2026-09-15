@@ -47,7 +47,6 @@ with tab1:
             pigs.reset_index(drop=True, inplace=True)
             pigs.index = pigs.index + 1
 
-            # 저장된 스펙 파싱
             specs = []
             for idx, row in st.session_state.spec_df.iterrows():
                 name = str(row['업체명'])
@@ -87,13 +86,11 @@ with tab1:
                     matched = pigs[cond].head(req_cnt)
                     pigs.loc[matched.index, '배정거래처'] = company
 
-            # 사이드바 요약 표
             st.sidebar.markdown("---")
             st.sidebar.subheader("📊 거래처별 배정 요약")
             summary = pigs[pigs['배정거래처'] != '미배정'].groupby(['배정거래처', '성별']).size().unstack(fill_value=0)
             st.sidebar.dataframe(summary, use_container_width=True, height=500)
 
-            # 상단 메인 지표
             total_pigs = len(pigs)
             assigned_pigs = len(pigs[pigs['배정거래처'] != '미배정'])
             unassigned_pigs = len(pigs[pigs['배정거래처'] == '미배정'])
@@ -132,16 +129,20 @@ with tab1:
 # ----------------- 탭 2: 거래처 스펙 관리 -----------------
 with tab2:
     st.subheader("⚙️ 등록된 거래처 스펙 수정 및 추가")
-    st.write("표 안의 셀을 클릭하여 직접 숫자를 수정하거나, 아래에서 항목을 추가/삭제할 수 있습니다.")
+    st.write("표 안의 셀을 클릭하여 숫자를 수정하거나 항목을 추가/삭제할 수 있습니다.")
 
-    # 표 직접 수정 기능
-    edited_df = st.data_editor(
-        st.session_state.spec_df,
-        num_rows="dynamic",
-        use_container_width=True,
-        key="spec_editor"
-    )
+    # 컬럼 비율을 이용해 가로 폭 축소 (전체 화면의 60%만 사용) 및 세로 높이 600px 지정
+    col_spec, col_blank = st.columns([3, 2])
+    
+    with col_spec:
+        edited_df = st.data_editor(
+            st.session_state.spec_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            height=600,
+            key="spec_editor"
+        )
 
-    if st.button("💾 스펙 변경사항 저장"):
-        st.session_state.spec_df = edited_df
-        st.success("거래처 스펙 변경 사항이 저장되었습니다!")
+        if st.button("💾 스펙 변경사항 저장", type="primary"):
+            st.session_state.spec_df = edited_df
+            st.success("거래처 스펙 변경 사항이 성공적으로 저장되었습니다!")
