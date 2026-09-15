@@ -30,17 +30,14 @@ if check_password():
     if 'spec_df' not in st.session_state:
         st.session_state.spec_df = pd.DataFrame(get_default_specs(st.session_state.target_counts))
 
+    # 📌 메인 메뉴 (2개 고정)
     st.sidebar.title("📌 메인 메뉴")
 
     if st.sidebar.button("🏢 1. 거래처 자동 배정 시스템", type="primary" if st.session_state.main_menu == "배정" else "secondary", use_container_width=True):
         st.session_state.main_menu = "배정"
         st.rerun()
 
-    if st.sidebar.button("⚙️ 2. 거래처 목표두수 관리", type="primary" if st.session_state.main_menu == "스펙" else "secondary", use_container_width=True):
-        st.session_state.main_menu = "스펙"
-        st.rerun()
-
-    if st.sidebar.button("📊 3. 농가 분석", type="primary" if st.session_state.main_menu == "농가분석" else "secondary", use_container_width=True):
+    if st.sidebar.button("📊 2. 농가 분석", type="primary" if st.session_state.main_menu == "농가분석" else "secondary", use_container_width=True):
         st.session_state.main_menu = "농가분석"
         st.rerun()
 
@@ -65,25 +62,50 @@ if check_password():
                 config[col] = st.column_config.Column(col, alignment="center")
         return config
 
-    # 파일 업로드 시 연동 엔진 실행
-    if uploaded_grade:
-        try:
-            pigs, specs_dict = allocate_pigs_data(uploaded_grade, st.session_state.spec_df)
-            st.session_state['allocated_pigs'] = pigs
-            st.session_state['specs_dict'] = specs_dict
-        except Exception as e:
-            st.error(f"파일 처리 중 오류가 발생했습니다: {e}")
-
     # ==============================================================================
     # [메뉴 1] 거래처 자동 배정 시스템
     # ==============================================================================
     if st.session_state.main_menu == "배정":
         st.title("🐖 주식회사 잇다 / 거래처 자동 배정 시스템")
 
-        tab1, tab2, tab3 = st.tabs(["🚀 자동 배정 실행", "🏢 거래처별 배정 상세", "🚚 잇다 배정"])
+        # 4개의 탭 카테고리 구성
+        tab1, tab2, tab3, tab4 = st.tabs([
+            "⚙️ 목표두수 설정", 
+            "🚀 자동 배정 실행", 
+            "🏢 거래처별 배정 상세", 
+            "🚚 잇다 배정"
+        ])
 
-        # ----------------- 탭 1: 자동 배정 실행 -----------------
+        # ----------------- 탭 1: 목표두수 설정 (배정 전 수량 확인 및 변동 반영) -----------------
         with tab1:
+            st.subheader("⚙️ 거래처별 배정 목표두수 설정")
+            st.info("💡 파일 업로드 후 목표 두수에 변동이 있으면 아래 표에서 수정 후 배정을 실행하세요. 변동이 없으시면 바로 배정 실행 버튼을 누르시면 됩니다.")
+
+            edited_spec_df = st.data_editor(
+                st.session_state.spec_df,
+                num_rows="dynamic",
+                use_container_width=True,
+                height=500,
+                key="target_count_editor",
+                column_config=get_centered_column_config(st.session_state.spec_df)
+            )
+
+            st.markdown(" ")
+            if st.button("🚀 이 수량으로 자동 배정 실행", type="primary", use_container_width=True):
+                st.session_state.spec_df = edited_spec_df
+                if uploaded_grade:
+                    try:
+                        pigs, specs_dict = allocate_pigs_data(uploaded_grade, st.session_state.spec_df)
+                        st.session_state['allocated_pigs'] = pigs
+                        st.session_state['specs_dict'] = specs_dict
+                        st.success("✅ 거래처 자동 배정이 완료되었습니다! [🚀 자동 배정 실행] 탭에서 결과를 확인하세요.")
+                    except Exception as e:
+                        st.error(f"파일 처리 중 오류가 발생했습니다: {e}")
+                else:
+                    st.warning("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 먼올 업로드해 주세요.")
+
+        # ----------------- 탭 2: 자동 배정 실행 결과 -----------------
+        with tab2:
             if 'allocated_pigs' in st.session_state:
                 pigs = st.session_state['allocated_pigs']
 
@@ -122,10 +144,10 @@ if check_password():
                     calc_height = (len(display_df) + 1) * 35 + 10
                     st.dataframe(display_df, height=calc_height, use_container_width=True, column_config=get_centered_column_config(display_df))
             else:
-                st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
+                st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드한 후, [⚙️ 목표두수 설정] 탭에서 배정 실행 버튼을 눌러주세요.")
 
-        # ----------------- 탭 2: 거래처별 배정 상세 -----------------
-        with tab2:
+        # ----------------- 탭 3: 거래처별 배정 상세 -----------------
+        with tab3:
             st.subheader("🏢 거래처별 개별 배정 내역 및 명단")
             if 'allocated_pigs' in st.session_state and 'specs_dict' in st.session_state:
                 pigs_all = st.session_state['allocated_pigs']
@@ -210,8 +232,8 @@ if check_password():
             else:
                 st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
 
-        # ----------------- 탭 3: 잇다 배정 (잇다 1 / 잇다 2 구분) -----------------
-        with tab3:
+        # ----------------- 탭 4: 잇다 배정 (잇다 1 / 잇다 2) -----------------
+        with tab4:
             st.subheader("🚚 잇다 배정 내역")
             if 'allocated_pigs' in st.session_state:
                 pigs_all = st.session_state['allocated_pigs']
@@ -249,34 +271,7 @@ if check_password():
                 st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
 
     # ==============================================================================
-    # [메뉴 2] 거래처 목표두수 관리 (직접 목표 두수를 입력/수정할 수 있는 페이지)
-    # ==============================================================================
-    elif st.session_state.main_menu == "스펙":
-        st.title("⚙️ 거래처별 배정 목표두수 수기 조정")
-        st.info("💡 예상 도축 수량 변경에 따라 거래처별 배정 목표 두수를 직접 입력하여 조정할 수 있습니다.")
-
-        # 에디터용 표 생성
-        edited_spec_df = st.data_editor(
-            st.session_state.spec_df,
-            num_rows="dynamic",
-            use_container_width=True,
-            height=600,
-            key="target_count_editor",
-            column_config=get_centered_column_config(st.session_state.spec_df)
-        )
-
-        if st.button("💾 변경된 목표 두수 적용 및 재배정 실행", type="primary", use_container_width=True):
-            st.session_state.spec_df = edited_spec_df
-            if uploaded_grade:
-                pigs, specs_dict = allocate_pigs_data(uploaded_grade, st.session_state.spec_df)
-                st.session_state['allocated_pigs'] = pigs
-                st.session_state['specs_dict'] = specs_dict
-                st.success("✅ 새로운 목표두수가 적용되어 거래처 자동 배정이 재계산되었습니다!")
-            else:
-                st.success("✅ 거래처 목표 두수가 업데이트되었습니다. 왼쪽 사이드바에서 파일을 업로드하시면 반영됩니다.")
-
-    # ==============================================================================
-    # [메뉴 3] 농가 분석
+    # [메뉴 2] 농가 분석
     # ==============================================================================
     elif st.session_state.main_menu == "농가분석":
         st.title("📊 농가별 출하 및 스펙 분석")
@@ -344,7 +339,7 @@ if check_password():
             with pd.ExcelWriter(output_anal, engine='openpyxl') as writer: final_analysis_df.to_excel(writer, sheet_name='농가분석', index=False)
             
             st.download_button(label="📥 농가분석 결과 엑셀 다운로드", data=output_anal.getvalue(), file_name=f"농가분석_{datetime.now().strftime('%Y%m%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            styled_df = final_analysis_df.style.apply(lambda row: ['font-weight: bold; background-color: #f1f3f5;'] * len(row) if row['농가'] == '합계' else [''] * len(row), axis=1)
+            styled_df = final_analysis_df.style.apply(lambda row: ['font-weight: bold; background-color: #f1f3f5;'] * len(row) if row['농가'] == '합계' else [''] * row, axis=1)
             
             calc_height = (len(final_analysis_df) + 1) * 35 + 10
             st.dataframe(styled_df, height=calc_height, use_container_width=True, hide_index=True, column_config=get_centered_column_config(final_analysis_df))
