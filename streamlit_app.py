@@ -17,7 +17,7 @@ st.set_page_config(page_title="주식회사 잇다 / 자동 배정 및 농가 �
 if 'main_menu' not in st.session_state:
     st.session_state.main_menu = "배정"
 
-# ----------------- 사이드바 메인 메뉴 (세로 버튼) -----------------
+# ----------------- 사이드바 메인 메뉴 (메뉴 전환 잔상 방지 처리) -----------------
 st.sidebar.title("📌 메인 메뉴")
 
 if st.sidebar.button(
@@ -25,16 +25,18 @@ if st.sidebar.button(
     type="primary" if st.session_state.main_menu == "배정" else "secondary", 
     use_container_width=True
 ):
-    st.session_state.main_menu = "배정"
-    st.rerun()
+    if st.session_state.main_menu != "배정":
+        st.session_state.main_menu = "배정"
+        st.rerun()
 
 if st.sidebar.button(
     "📊 2. 농가 분석", 
     type="primary" if st.session_state.main_menu == "농가분석" else "secondary", 
     use_container_width=True
 ):
-    st.session_state.main_menu = "농가분석"
-    st.rerun()
+    if st.session_state.main_menu != "농가분석":
+        st.session_state.main_menu = "농가분석"
+        st.rerun()
 
 st.sidebar.markdown("---")
 st.sidebar.header("📁 파일 업로드")
@@ -68,7 +70,7 @@ def get_centered_column_config(df):
             config[col] = st.column_config.Column(col, alignment="center")
     return config
 
-# ----------------- 파일 업로드 및 자동 배정 연산 -----------------
+# ----------------- 파일 업로드 및 실시간 엑셀 읽기 연산 -----------------
 if uploaded_grade:
     try:
         raw_df = pd.read_excel(uploaded_grade, header=None)
@@ -493,12 +495,13 @@ if st.session_state.main_menu == "배정":
             st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
 
 # ==============================================================================
-# [메뉴 2] 농가 분석 (Pandas Styler로 합계 행 볼드체 & 배경색 완벽 적용)
+# [메뉴 2] 농가 분석 (실제 업로드 엑셀 데이터 동적 연산)
 # ==============================================================================
 elif st.session_state.main_menu == "농가분석":
     st.title("📊 농가별 출하 및 스펙 분석")
     
     if 'allocated_pigs' in st.session_state:
+        # 업로드된 실제 엑셀 데이터를 가져와서 농가별 실시간 집계
         pigs_all = st.session_state['allocated_pigs'].copy()
         
         def extract_feed_and_farm(val):
@@ -568,7 +571,7 @@ elif st.session_state.main_menu == "농가분석":
 
         analysis_df = pd.DataFrame(rows)
 
-        # ----------------- 합계 행 계산 -----------------
+        # ----------------- 실시간 총합계 집계 연산 -----------------
         total_head = len(pigs_all)
         total_w = pigs_all['중량'].sum()
         dressing_rate = 76.32
@@ -636,15 +639,15 @@ elif st.session_state.main_menu == "농가분석":
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-        # ----------------- 마지막 '합계' 행 볼드체 및 연한 회색 배경 스타일 지정 -----------------
-        def highlight_total_row(row):
+        # ----------------- 마지막 '합계' 행 스타일링 (깨지는 문구 없이 진짜 볼드체 적용) -----------------
+        def style_total_row(row):
             if row['농가'] == '합계':
                 return ['font-weight: bold; background-color: #f1f3f5;'] * len(row)
             return [''] * len(row)
 
-        styled_df = final_analysis_df.style.apply(highlight_total_row, axis=1)
+        styled_df = final_analysis_df.style.apply(style_total_row, axis=1)
 
-        # 딱 맞춘 높이 (남는 빈 표 행 없음)
+        # 빈 행 없이 딱 맞춘 높이 연산
         calc_height = (len(final_analysis_df) + 1) * 36 + 5
 
         st.dataframe(
