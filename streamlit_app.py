@@ -13,31 +13,27 @@ except ImportError:
 
 st.set_page_config(page_title="주식회사 잇다 / 자동 배정 및 농가 분석 시스템", layout="wide", page_icon="🐖")
 
-# ----------------- 사이드바 최상위 메뉴 구성 (버튼 세션 관리) -----------------
+# ----------------- 사이드바 최상위 메뉴 구성 (세로 버튼 배치) -----------------
 st.sidebar.title("📌 메인 메뉴")
 
 if 'main_menu' not in st.session_state:
     st.session_state.main_menu = "배정"
 
-btn_col1, btn_col2 = st.sidebar.columns(2)
+if st.sidebar.button(
+    "🏢 1. 거래처 자동 배정 시스템", 
+    type="primary" if st.session_state.main_menu == "배정" else "secondary", 
+    use_container_width=True
+):
+    st.session_state.main_menu = "배정"
+    st.rerun()
 
-with btn_col1:
-    if st.button(
-        "🏢 1. 거래처 자동 배정", 
-        type="primary" if st.session_state.main_menu == "배정" else "secondary", 
-        use_container_width=True
-    ):
-        st.session_state.main_menu = "배정"
-        st.rerun()
-
-with btn_col2:
-    if st.button(
-        "📊 2. 농가 분석", 
-        type="primary" if st.session_state.main_menu == "농가분석" else "secondary", 
-        use_container_width=True
-    ):
-        st.session_state.main_menu = "농가분석"
-        st.rerun()
+if st.sidebar.button(
+    "📊 2. 농가 분석", 
+    type="primary" if st.session_state.main_menu == "농가분석" else "secondary", 
+    use_container_width=True
+):
+    st.session_state.main_menu = "농가분석"
+    st.rerun()
 
 # 기본 스펙 데이터 설정
 default_specs = [
