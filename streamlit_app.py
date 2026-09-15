@@ -1,19 +1,26 @@
 import streamlit as st
 import pandas as pd
 import io
+import numpy as np
 from datetime import datetime
-from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(page_title="도축 스펙 거래처 자동 배정", layout="wide", page_icon="🐖")
 
 st.title("🐖 돼지 도축 스펙 거래처 자동 배정 시스템")
 
 # ----------------- 구글 시트 연동 -----------------
-conn = st.connection("gsheets", type=GSheetsConnection)
-
-# 스펙 데이터 불러오기
 try:
-    spec_df = conn.read(worksheet="스펙", ttl="1m")
+    from streamlit_gsheets import GSheetsConnection
+    conn = st.connection("gsheets", type=GSheetsConnection)
+except Exception:
+    conn = None
+
+# 기본 스펙 불러오기
+try:
+    if conn:
+        spec_df = conn.read(worksheet="스펙", ttl="1m")
+    else:
+        raise Exception("연동 미설정")
 except Exception:
     default_specs = [
         {"업체명": "대용식품", "중량(kg)": "85~90", "등지방(mm)": "18~21", "등급": "1,1+", "거세": 6, "암": 4},
@@ -73,12 +80,15 @@ with tab1:
                 f_cnt = int(row['암']) if pd.notna(row['암']) else 0
 
                 specs.append({
-                    '업체명': name, 'w_min': w_min, 'w_max': w_max,
-                    'f_min': f_min, 'f_max': f_max, 'grades': grades,
+                    '업체명': name, 'w_min': w_min, 'w_max': w_max, 'w_mid': (w_min + w_max)/2,
+                    'f_min': f_min, 'f_max': f_max, 'f_mid': (f_min + f_max)/2, 'grades': grades,
                     '거세수량': c_cnt, '암수량': f_cnt
                 })
 
             pigs['배정거래처'] = '미배정'
+
+            # --- [1차 배정] 100% 조건 매칭 ---
+            remaining_req = []
             for spec in specs:
                 company = spec['업체명']
                 for sex, req_cnt in [('거세', spec['거세수량']), ('암', spec['암수량'])]:
@@ -92,8 +102,40 @@ with tab1:
                     )
                     if spec['grades']:
                         cond &= (pigs['등급'].isin(spec['grades']))
+                    
                     matched = pigs[cond].head(req_cnt)
                     pigs.loc[matched.index, '배정거래처'] = company
+                    
+                    # 남은 수량 기록
+                    assigned_cnt = len(matched)
+                    if assigned_cnt < req_cnt:
+                        remaining_req.append({
+                            'company': company, 'sex': sex, 'needed': req_cnt - assigned_cnt,
+                            'spec': spec
+                        })
+
+            # --- [2차 배정] 오차 최소화 유사 매칭 (잔여 수량 충원) ---
+            for req in remaining_req:
+                company = req['company']
+                sex = req['sex']
+                needed = req['needed']
+                spec = req['spec']
+
+                # 미배정 중 성별 및 등급 일치 개체 검색
+                cond_unassigned = (pigs['배정거래처'] == '미배정') & (pigs['성별'] == sex)
+                if spec['grades']:
+                    cond_unassigned &= (pigs['등급'].isin(spec['grades']))
+                
+                candidates = pigs[cond_unassigned].copy()
+                if not candidates.empty:
+                    # 목표 중량/등지방 중앙값과의 거리(오차) 계산
+                    w_diff = np.maximum(0, np.maximum(spec['w_min'] - candidates['중량'], candidates['중량'] - spec['w_max']))
+                    f_diff = np.maximum(0, np.maximum(spec['f_min'] - candidates['등지방'], candidates['등지방'] - spec['f_max']))
+                    candidates['score'] = w_diff + f_diff
+
+                    # 오차가 가장 작은 순서대로 추출하여 배정
+                    matched_relaxed = candidates.sort_values('score').head(needed)
+                    pigs.loc[matched_relaxed.index, '배정거래처'] = company
 
             summary = pigs[pigs['배정거래처'] != '미배정'].groupby(['배정거래처', '성별']).size().unstack(fill_value=0)
 
@@ -116,41 +158,32 @@ with tab1:
             with col_main:
                 st.subheader("📋 전체 개체별 세부 배정 내역")
                 
-                col_date, col_save = st.columns([1, 2])
-                with col_date:
-                    save_date = st.date_input("저장 날짜 선택", datetime.now())
-                with col_save:
-                    st.write("")
-                    st.write("")
-                    if st.button("☁️ 구글 시트로 이력 저장하기", type="primary"):
-                        try:
-                            date_str = save_date.strftime("%Y-%m-%d")
-                            save_pigs = pigs.copy()
-                            save_pigs['배정일자'] = date_str
-                            
-                            try:
-                                history_df = conn.read(worksheet="이력", ttl="0s")
-                                updated_df = pd.concat([history_df, save_pigs], ignore_index=True)
-                            except Exception:
-                                updated_df = save_pigs
-                                
-                            conn.update(worksheet="이력", data=updated_df)
-                            st.success(f"✅ {date_str} 배정 결과가 구글 시트에 성공적으로 동기화되었습니다!")
-                        except Exception as e:
-                            st.error(f"구글 시트 저장 안내: Secrets 설정을 완료해 주세요. ({e})")
-
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    pigs.to_excel(writer, sheet_name='배정내역')
-                    summary.to_excel(writer, sheet_name='요약')
-                processed_data = output.getvalue()
+                today_tab_name = datetime.now().strftime("%Y-%m-%d")
                 
-                st.download_button(
-                    label="📥 배정 결과 엑셀 다운로드",
-                    data=processed_data,
-                    file_name=f"돼지배정결과_{save_date.strftime('%Y%m%d')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
+                col_btn_save, col_btn_dl = st.columns([1, 1])
+                with col_btn_save:
+                    if st.button(f"☁️ 구글 시트로 당일({today_tab_name}) 탭 생성 및 저장", type="primary"):
+                        try:
+                            if conn is None:
+                                raise Exception("구글 시트 연동 설정 필요")
+                            conn.update(worksheet=today_tab_name, data=pigs)
+                            st.success(f"✅ 구글 시트에 [{today_tab_name}] 탭이 생성되고 배정 내역이 저장되었습니다!")
+                        except Exception as e:
+                            st.error(f"구글 시트 저장 실패: Secrets 설정을 진행해 주세요. ({e})")
+
+                with col_btn_dl:
+                    output = io.BytesIO()
+                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                        pigs.to_excel(writer, sheet_name='배정내역')
+                        summary.to_excel(writer, sheet_name='요약')
+                    processed_data = output.getvalue()
+                    
+                    st.download_button(
+                        label="📥 배정 결과 엑셀 다운로드",
+                        data=processed_data,
+                        file_name=f"돼지배정결과_{today_tab_name}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
 
                 st.dataframe(pigs, height=900, use_container_width=True)
 
@@ -161,27 +194,35 @@ with tab1:
 
 # ----------------- 탭 2: 배정 이력 조회 -----------------
 with tab2:
-    st.subheader("📅 구글 시트 날짜별 배정 이력 조회")
+    st.subheader("📅 구글 시트 날짜별(탭별) 배정 이력 조회")
     try:
-        history_df = conn.read(worksheet="이력", ttl="1m")
-        if history_df.empty or '배정일자' not in history_df.columns:
-            st.info("아직 구글 시트에 저장된 배정 이력이 없습니다.")
-        else:
-            dates = sorted(history_df['배정일자'].unique().tolist(), reverse=True)
-            selected_date = st.selectbox("조회할 날짜 선택", dates)
-            
-            filtered_pigs = history_df[history_df['배정일자'] == selected_date]
-            summary_hist = filtered_pigs[filtered_pigs['배정거래처'] != '미배정'].groupby(['배정거래처', '성별']).size().unstack(fill_value=0)
-            
-            c1, c2 = st.columns([1, 2])
-            with c1:
-                st.write("**거래처별 요약**")
-                st.dataframe(summary_hist, use_container_width=True)
-            with c2:
-                st.write("**상세 개체 내역**")
-                st.dataframe(filtered_pigs, height=600, use_container_width=True)
-    except Exception as e:
-        st.info("구글 시트 열쇠(Secrets) 설정 완료 후 자동 조회됩니다.")
+        if conn is None:
+            raise Exception("Secrets 필요")
+        
+        search_date = st.date_input("조회하고 싶은 날짜 선택", datetime.now())
+        target_tab = search_date.strftime("%Y-%m-%d")
+        
+        if st.button(f"🔍 [{target_tab}] 이력 불러오기"):
+            try:
+                hist_df = conn.read(worksheet=target_tab, ttl="0s")
+                if hist_df.empty:
+                    st.warning(f"[{target_tab}] 탭은 존재하지만 데이터가 없습니다.")
+                else:
+                    st.write(f"### 📌 {target_tab} 배정 이력")
+                    summary_hist = hist_df[hist_df['배정거래처'] != '미배정'].groupby(['배정거래처', '성별']).size().unstack(fill_value=0)
+                    
+                    c1, c2 = st.columns([1, 2])
+                    with c1:
+                        st.write("**거래처별 요약**")
+                        st.dataframe(summary_hist, use_container_width=True)
+                    with c2:
+                        st.write("**상세 개체 내역**")
+                        st.dataframe(hist_df, height=600, use_container_width=True)
+            except Exception:
+                st.error(f"❌ [{target_tab}] 날짜로 저장된 구글 시트 탭이 없습니다.")
+
+    except Exception:
+        st.info("💡 구글 시트 열쇠(Secrets) 등록 완료 시 날짜별 이력 조회가 가능합니다.")
 
 # ----------------- 탭 3: 거래처 스펙 관리 -----------------
 with tab3:
@@ -200,9 +241,11 @@ with tab3:
 
         if st.button("💾 구글 시트에 스펙 변경사항 저장", type="primary"):
             try:
+                if conn is None:
+                    raise Exception("Secrets 필요")
                 conn.update(worksheet="스펙", data=edited_df)
                 st.session_state.spec_df = edited_df
-                st.success("거래처 스펙 변경 사항이 구글 시트에 성공적으로 동기화되었습니다!")
-            except Exception as e:
+                st.success("거래처 스펙 변경 사항이 구글 시트 ['스펙'] 탭에 성공적으로 동기화되었습니다!")
+            except Exception:
                 st.session_state.spec_df = edited_df
-                st.success("스펙이 임시 반영되었습니다. (Secrets 등록 후 자동 저장됨)")
+                st.success("스펙이 임시 반영되었습니다.")
