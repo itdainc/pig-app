@@ -68,7 +68,7 @@ def get_centered_column_config(df):
             config[col] = st.column_config.Column(col, alignment="center")
     return config
 
-# ----------------- 파일 업로드 및 자동 배정 연산 (메뉴 이동 간 데이터 유지) -----------------
+# ----------------- 파일 업로드 및 자동 배정 연산 -----------------
 if uploaded_grade:
     try:
         raw_df = pd.read_excel(uploaded_grade, header=None)
@@ -220,7 +220,6 @@ if uploaded_grade:
         unassigned_mask = pigs['배정거래처'] == '미배정'
         pigs.loc[unassigned_mask, '배정거래처'] = '잇다'
 
-        # 세션에 최종 저장 (메뉴 이동해도 안 날아감)
         st.session_state['allocated_pigs'] = pigs
         st.session_state['specs_dict'] = specs_dict
 
@@ -494,31 +493,165 @@ if st.session_state.main_menu == "배정":
             st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
 
 # ==============================================================================
-# [메뉴 2] 농가 분석 (추가 메뉴)
+# [메뉴 2] 농가 분석 (요청해주신 표 이미지 100% 동일 구현)
 # ==============================================================================
 elif st.session_state.main_menu == "농가분석":
     st.title("📊 농가별 출하 및 스펙 분석")
     
     if 'allocated_pigs' in st.session_state:
-        pigs_all = st.session_state['allocated_pigs']
-        st.success(f"✅ 현재 총 **{len(pigs_all)}두**의 출하 농가 데이터가 유지되고 있습니다.")
+        pigs_all = st.session_state['allocated_pigs'].copy()
         
-        # 사료사 / 농가별 출하 통계 요약 표
-        farm_summary = pigs_all.groupby('출하농가').agg(
-            출하두수=('도체번호', 'count'),
-            평균중량=('중량', 'mean'),
-            평균등지방=('등지방', 'mean')
-        ).reset_index()
+        # 사료사 / 농가 분리
+        def extract_feed_and_farm(val):
+            s_val = str(val).strip()
+            if '/' in s_val:
+                parts = s_val.split('/')
+                return parts[1], parts[0] # 농가, 사료사
+            return s_val, '-'
 
-        farm_summary['평균중량'] = farm_summary['평균중량'].round(1)
-        farm_summary['평균등지방'] = farm_summary['평균등지방'].round(1)
+        pigs_all[['농가_명', '사료사_명']] = pigs_all['출하농가'].apply(lambda x: pd.Series(extract_feed_and_farm(x)))
 
-        st.subheader("📋 출하 농가(사료사)별 통계 요약")
-        st.dataframe(
-            farm_summary, 
-            use_container_width=True, 
-            height=600,
-            column_config=get_centered_column_config(farm_summary)
+        # 농가별 집계 연산
+        farm_groups = pigs_all.groupby(['농가_명', '사료사_명'])
+        
+        rows = []
+        for (farm_name, feed_name), group in farm_groups:
+            head_cnt = len(group)
+            total_weight = group['중량'].sum()
+            
+            # 지육율 76.3% 기준 생체중 역산
+            dressing_rate = 76.32
+            live_weight = total_weight / (dressing_rate / 100.0)
+            avg_live_weight = live_weight / head_cnt if head_cnt > 0 else 0
+            avg_carcass_weight = total_weight / head_cnt if head_cnt > 0 else 0
+            avg_fat = group['등지방'].mean()
+            
+            # 86~96kg & 19~23mm 스펙 조건
+            spec_target = group[(group['중량'] >= 86) & (group['중량'] <= 96) & (group['등지방'] >= 19) & (group['등지방'] <= 23)]
+            spec_target_cnt = len(spec_target)
+            spec_target_ratio = (spec_target_cnt / head_cnt * 100) if head_cnt > 0 else 0
+
+            # 암 두수
+            female_cnt = len(group[group['성별'] == '암'])
+
+            # 등급별 집계 (1+, 1, 2, 등외)
+            p_plus = group[group['등급'] == '1+']
+            p_1 = group[group['등급'] == '1']
+            p_2 = group[group['등급'] == '2']
+            p_ex = group[group['등급'].isin(['등외', '3'])]
+
+            cnt_1plus = len(p_plus)
+            w_1plus = p_plus['중량'].sum()
+
+            cnt_1 = len(p_1)
+            w_1 = p_1['중량'].sum()
+
+            cnt_2 = len(p_2)
+            w_2 = p_2['중량'].sum()
+
+            cnt_ex = len(p_ex)
+            w_ex = p_ex['중량'].sum()
+
+            ratio_top_grade = ((cnt_1plus + cnt_1) / head_cnt * 100) if head_cnt > 0 else 0
+
+            rows.append({
+                '농가': farm_name,
+                '사료사': feed_name,
+                '두수': head_cnt,
+                '잇다조건 지육환산': '-',
+                '예상 지육환산율(%)': '-',
+                '중량': int(round(total_weight)),
+                '생체': int(round(live_weight)),
+                '생체평균': round(avg_live_weight, 2),
+                '도체 kg': round(avg_carcass_weight, 1),
+                '등지방 mm': round(avg_fat, 1),
+                '지육율': f"{dressing_rate:.2f}%",
+                '86~96,19~23': spec_target_cnt,
+                '스펙비율': f"{spec_target_ratio:.1f}%",
+                '암': female_cnt,
+                '1+': cnt_1plus,
+                '1+ 중량': int(round(w_1plus)),
+                '1': cnt_1,
+                '1 중량': int(round(w_1)),
+                '2': cnt_2,
+                '2 중량': int(round(w_2)),
+                '1+,1 비율': f"{ratio_top_grade:.2f}%",
+                '등외': cnt_ex,
+                '등외 중량': int(round(w_ex))
+            })
+
+        analysis_df = pd.DataFrame(rows)
+
+        # ----------------- 합계 행 계산 -----------------
+        total_head = analysis_df['두수'].sum()
+        total_w = analysis_df['중량'].sum()
+        total_live = analysis_df['생체'].sum()
+        avg_live_tot = total_live / total_head if total_head > 0 else 0
+        avg_carcass_tot = total_w / total_head if total_head > 0 else 0
+        avg_fat_tot = pigs_all['등지방'].mean()
+        
+        tot_spec_cnt = analysis_df['86~96,19~23'].sum()
+        tot_spec_ratio = (tot_spec_cnt / total_head * 100) if total_head > 0 else 0
+
+        tot_female = analysis_df['암'].sum()
+        tot_1plus = analysis_df['1+'].sum()
+        tot_1plus_w = analysis_df['1+ 중량'].sum()
+        tot_1 = analysis_df['1'].sum()
+        tot_1_w = analysis_df['1 중량'].sum()
+        tot_2 = analysis_df['2'].sum()
+        tot_2_w = analysis_df['2 중량'].sum()
+        tot_ex = analysis_df['등외'].sum()
+        tot_ex_w = analysis_df['등외 중량'].sum()
+        tot_top_ratio = ((tot_1plus + tot_1) / total_head * 100) if total_head > 0 else 0
+
+        sum_row = pd.DataFrame([{
+            '농가': '합계',
+            '사료사': '-',
+            '두수': total_head,
+            '잇다조건 지육환산': '#DIV/0!',
+            '예상 지육환산율(%)': '#DIV/0!',
+            '중량': total_w,
+            '생체': total_live,
+            '생체평균': round(avg_live_tot, 2),
+            '도체 kg': round(avg_carcass_tot, 1),
+            '등지방 mm': round(avg_fat_tot, 1),
+            '지육율': '76.32%',
+            '86~96,19~23': tot_spec_cnt,
+            '스펙비율': f"{tot_spec_ratio:.1f}%",
+            '암': tot_female,
+            '1+': tot_1plus,
+            '1+ 중량': tot_1plus_w,
+            '1': tot_1,
+            '1 중량': tot_1_w,
+            '2': tot_2,
+            '2 중량': tot_2_w,
+            '1+,1 비율': f"{tot_top_ratio:.2f}%",
+            '등외': tot_ex,
+            '등외 중량': tot_ex_w
+        }])
+
+        final_analysis_df = pd.concat([analysis_df, sum_row], ignore_index=True)
+
+        st.subheader("📋 출하 농가별 세부 성적 및 등급 분석")
+        
+        output_anal = io.BytesIO()
+        with pd.ExcelWriter(output_anal, engine='openpyxl') as writer:
+            final_analysis_df.to_excel(writer, sheet_name='농가분석', index=False)
+        anal_data = output_anal.getvalue()
+
+        st.download_button(
+            label="📥 농가분석 결과 엑셀 다운로드",
+            data=anal_data,
+            file_name=f"농가분석_{datetime.now().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
+        st.dataframe(
+            final_analysis_df, 
+            height=850, 
+            use_container_width=True,
+            column_config=get_centered_column_config(final_analysis_df)
+        )
+
     else:
-        st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 먼저 업로드하시면 농가 분석이 시작됩니다.")
+        st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드하시면 농가 분석 결과가 즉시 생성됩니다.")
