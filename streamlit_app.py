@@ -480,9 +480,9 @@ with tab4:
     except Exception:
         st.info("💡 구글 시트 연동 완료 시 날짜별 이력 조회가 가능합니다.")
 
-# ----------------- 탭 5: 잇다 배정 -----------------
+# ----------------- 탭 5: 잇다 배정 (요청 사항 반영) -----------------
 with tab5:
-    st.subheader("🚚 잇다 전달용 표 및 엑셀 다운로드")
+    st.subheader("🚚 잇다 배정")
     
     if 'allocated_pigs' in st.session_state:
         pigs_all = st.session_state['allocated_pigs']
@@ -495,7 +495,15 @@ with tab5:
             total_jn_count = len(jn_df)
             total_jn_weight = jn_df['중량'].sum()
 
-            st.success(f"📌 **잇다 전달 총 수량:** {total_jn_count}두 / **총 중량:** {total_jn_weight:,.1f} kg")
+            # 연회색 박스 배경 + 요청하신 문구 양식 반영 (이모티콘 제거)
+            st.markdown(
+                f"""
+                <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 12px 18px; font-size: 15px; color: #333333; margin-bottom: 15px;">
+                    <strong>전남지사 배정수량 :</strong> {total_jn_count}두 / <strong>총중량 :</strong> {total_jn_weight:,.1f} kg
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
             jn_export = pd.DataFrame({
                 'No.': jn_df.index,
