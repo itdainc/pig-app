@@ -41,8 +41,8 @@ except Exception:
 if 'spec_df' not in st.session_state:
     st.session_state.spec_df = spec_df
 
-# ----------------- 탭 구성 -----------------
-tab1, tab2, tab3 = st.tabs(["🚀 자동 배정 실행", "📅 배정 이력 조회 (구글 시트)", "⚙️ 거래처 스펙 관리"])
+# ----------------- 탭 구성 (순서 변경 요청 반영) -----------------
+tab1, tab2, tab3 = st.tabs(["🚀 자동 배정 실행", "⚙️ 거래처 스펙 관리", "📅 배정 이력 조회 (구글 시트)"])
 
 # ----------------- 탭 1: 자동 배정 -----------------
 with tab1:
@@ -80,14 +80,14 @@ with tab1:
                 f_cnt = int(row['암']) if pd.notna(row['암']) else 0
 
                 specs.append({
-                    '업체명': name, 'w_min': w_min, 'w_max': w_max, 'w_mid': (w_min + w_max)/2,
-                    'f_min': f_min, 'f_max': f_max, 'f_mid': (f_min + f_max)/2, 'grades': grades,
+                    '업체명': name, 'w_min': w_min, 'w_max': w_max,
+                    'f_min': f_min, 'f_max': f_max, 'grades': grades,
                     '거세수량': c_cnt, '암수량': f_cnt
                 })
 
             pigs['배정거래처'] = '미배정'
 
-            # --- [1차 배정] 100% 조건 매칭 ---
+            # --- 1차 배정: 100% 조건 엄격 매칭 ---
             remaining_req = []
             for spec in specs:
                 company = spec['업체명']
@@ -106,7 +106,6 @@ with tab1:
                     matched = pigs[cond].head(req_cnt)
                     pigs.loc[matched.index, '배정거래처'] = company
                     
-                    # 남은 수량 기록
                     assigned_cnt = len(matched)
                     if assigned_cnt < req_cnt:
                         remaining_req.append({
@@ -114,28 +113,51 @@ with tab1:
                             'spec': spec
                         })
 
-            # --- [2차 배정] 오차 최소화 유사 매칭 (잔여 수량 충원) ---
+            # --- 2차 배정: 성별 유지 + 오차 최소화 완화 매칭 ---
+            still_remaining = []
             for req in remaining_req:
                 company = req['company']
                 sex = req['sex']
                 needed = req['needed']
                 spec = req['spec']
 
-                # 미배정 중 성별 및 등급 일치 개체 검색
                 cond_unassigned = (pigs['배정거래처'] == '미배정') & (pigs['성별'] == sex)
-                if spec['grades']:
-                    cond_unassigned &= (pigs['등급'].isin(spec['grades']))
-                
                 candidates = pigs[cond_unassigned].copy()
+                
                 if not candidates.empty:
-                    # 목표 중량/등지방 중앙값과의 거리(오차) 계산
                     w_diff = np.maximum(0, np.maximum(spec['w_min'] - candidates['중량'], candidates['중량'] - spec['w_max']))
                     f_diff = np.maximum(0, np.maximum(spec['f_min'] - candidates['등지방'], candidates['등지방'] - spec['f_max']))
-                    candidates['score'] = w_diff + f_diff
+                    candidates['score'] = w_diff * 1.5 + f_diff
 
-                    # 오차가 가장 작은 순서대로 추출하여 배정
                     matched_relaxed = candidates.sort_values('score').head(needed)
                     pigs.loc[matched_relaxed.index, '배정거래처'] = company
+                    
+                    assigned_cnt = len(matched_relaxed)
+                    if assigned_cnt < needed:
+                        still_remaining.append({
+                            'company': company, 'needed': needed - assigned_cnt,
+                            'spec': spec
+                        })
+                else:
+                    still_remaining.append({
+                        'company': company, 'needed': needed,
+                        'spec': spec
+                    })
+
+            # --- 3차 배정: 성별 불문 잔여 미배정 돼지 최종 충원 (미배정 최소화) ---
+            for req in still_remaining:
+                company = req['company']
+                needed = req['needed']
+                spec = req['spec']
+
+                candidates = pigs[pigs['배정거래처'] == '미배정'].copy()
+                if not candidates.empty:
+                    w_diff = np.maximum(0, np.maximum(spec['w_min'] - candidates['중량'], candidates['중량'] - spec['w_max']))
+                    f_diff = np.maximum(0, np.maximum(spec['f_min'] - candidates['등지방'], candidates['등지방'] - spec['f_max']))
+                    candidates['score'] = w_diff * 1.5 + f_diff
+
+                    matched_final = candidates.sort_values('score').head(needed)
+                    pigs.loc[matched_final.index, '배정거래처'] = company
 
             summary = pigs[pigs['배정거래처'] != '미배정'].groupby(['배정거래처', '성별']).size().unstack(fill_value=0)
 
@@ -192,8 +214,34 @@ with tab1:
     else:
         st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]만 올려주시면 바로 배정됩니다.")
 
-# ----------------- 탭 2: 배정 이력 조회 -----------------
+# ----------------- 탭 2: 거래처 스펙 관리 (순서 변경) -----------------
 with tab2:
+    st.subheader("⚙️ 등록된 거래처 스펙 수정 및 추가 (구글 시트 연동)")
+    st.write("표 안의 셀을 클릭하여 숫자를 수정하거나 항목을 추가/삭제할 수 있습니다.")
+
+    col_spec, col_blank = st.columns([3, 2])
+    with col_spec:
+        edited_df = st.data_editor(
+            st.session_state.spec_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            height=600,
+            key="spec_editor"
+        )
+
+        if st.button("💾 구글 시트에 스펙 변경사항 저장", type="primary"):
+            try:
+                if conn is None:
+                    raise Exception("Secrets 필요")
+                conn.update(worksheet="스펙", data=edited_df)
+                st.session_state.spec_df = edited_df
+                st.success("거래처 스펙 변경 사항이 구글 시트 ['스펙'] 탭에 성공적으로 동기화되었습니다!")
+            except Exception:
+                st.session_state.spec_df = edited_df
+                st.success("스펙이 임시 반영되었습니다.")
+
+# ----------------- 탭 3: 배정 이력 조회 (순서 변경) -----------------
+with tab3:
     st.subheader("📅 구글 시트 날짜별(탭별) 배정 이력 조회")
     try:
         if conn is None:
@@ -223,29 +271,3 @@ with tab2:
 
     except Exception:
         st.info("💡 구글 시트 열쇠(Secrets) 등록 완료 시 날짜별 이력 조회가 가능합니다.")
-
-# ----------------- 탭 3: 거래처 스펙 관리 -----------------
-with tab3:
-    st.subheader("⚙️ 등록된 거래처 스펙 수정 및 추가 (구글 시트 연동)")
-    st.write("표 안의 셀을 클릭하여 숫자를 수정하거나 항목을 추가/삭제할 수 있습니다.")
-
-    col_spec, col_blank = st.columns([3, 2])
-    with col_spec:
-        edited_df = st.data_editor(
-            st.session_state.spec_df,
-            num_rows="dynamic",
-            use_container_width=True,
-            height=600,
-            key="spec_editor"
-        )
-
-        if st.button("💾 구글 시트에 스펙 변경사항 저장", type="primary"):
-            try:
-                if conn is None:
-                    raise Exception("Secrets 필요")
-                conn.update(worksheet="스펙", data=edited_df)
-                st.session_state.spec_df = edited_df
-                st.success("거래처 스펙 변경 사항이 구글 시트 ['스펙'] 탭에 성공적으로 동기화되었습니다!")
-            except Exception:
-                st.session_state.spec_df = edited_df
-                st.success("스펙이 임시 반영되었습니다.")
