@@ -41,6 +41,13 @@ except Exception:
 if 'spec_df' not in st.session_state:
     st.session_state.spec_df = spec_df
 
+# 공통 가운데 정렬 + 검은색 글자 스타일 지정 함수
+def style_center_black(df):
+    return df.style.set_properties(**{
+        'text-align': 'center',
+        'color': '#000000'
+    })
+
 # ----------------- 탭 구성 -----------------
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🚀 자동 배정 실행", 
@@ -73,6 +80,7 @@ with tab1:
             pigs.index = pigs.index + 1
 
             specs = []
+            specs_dict = {}
             for idx, row in st.session_state.spec_df.iterrows():
                 name = str(row['업체명'])
                 weight_str = str(row['중량(kg)'])
@@ -92,11 +100,13 @@ with tab1:
                 c_ratio = (c_cnt / total_ratio) if total_ratio > 0 else 0.5
                 f_ratio = (f_cnt / total_ratio) if total_ratio > 0 else 0.5
 
-                specs.append({
+                spec_obj = {
                     '업체명': name, 'w_min': w_min, 'w_max': w_max,
                     'f_min': f_min, 'f_max': f_max, 'grades': grades,
                     '거세비율': c_ratio, '암비율': f_ratio
-                })
+                }
+                specs.append(spec_obj)
+                specs_dict[name] = spec_obj
 
             pigs['배정거래처'] = '미배정'
 
@@ -143,21 +153,21 @@ with tab1:
             pigs.loc[unassigned_mask, '배정거래처'] = '전남지사(잇다)'
 
             st.session_state['allocated_pigs'] = pigs
+            st.session_state['specs_dict'] = specs_dict
 
-            # ----------------- 좌측 배정요약 표 -----------------
+            # ----------------- 좌측 배정요약 표 (요청: 합계 / 거세 / 암 순서 및 가운데 검은색) -----------------
             summary = pigs.groupby(['배정거래처', '성별']).size().unstack(fill_value=0)
             if '거세' not in summary.columns: summary['거세'] = 0
             if '암' not in summary.columns: summary['암'] = 0
             
-            summary = summary[['거세', '암']]
             summary['합계'] = summary['거세'] + summary['암']
+            # 요청하신 컬럼 순서 지정: 합계 -> 거세 -> 암
+            summary = summary[['합계', '거세', '암']]
             summary.columns.name = None
-
-            styled_summary = summary.style.set_properties(**{'text-align': 'center'})
 
             st.sidebar.markdown("---")
             st.sidebar.subheader("📊 거래처별 배정 요약")
-            st.sidebar.dataframe(styled_summary, use_container_width=True, height=500)
+            st.sidebar.dataframe(style_center_black(summary), use_container_width=True, height=500)
 
             # ----------------- 상단 지표 -----------------
             total_pigs = len(pigs)
@@ -171,7 +181,6 @@ with tab1:
 
             st.markdown("---")
             
-            # 가로 길이 축소 (4:1 비율 레이아웃)
             col_main, _ = st.columns([4, 1])
             with col_main:
                 st.subheader("📋 전체 개체별 세부 배정 내역")
@@ -205,19 +214,20 @@ with tab1:
                     )
 
                 display_df = pigs[['도체번호', '성별', '중량', '등지방', '등급', '배정거래처', '이력번호', '출하농가']].copy()
-                st.dataframe(display_df, height=750, use_container_width=True)
+                st.dataframe(style_center_black(display_df), height=750, use_container_width=True)
 
         except Exception as e:
             st.error(f"파일 처리 중 오류가 발생했습니다: {e}")
     else:
         st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]만 올려주시면 바로 배정됩니다.")
 
-# ----------------- 탭 2: 거래처별 배정 상세 -----------------
+# ----------------- 탭 2: 거래처별 배정 상세 (비고란 스펙 분석 추가) -----------------
 with tab2:
     st.subheader("🏢 거래처별 개별 배정 내역 및 명단")
     
-    if 'allocated_pigs' in st.session_state:
+    if 'allocated_pigs' in st.session_state and 'specs_dict' in st.session_state:
         pigs_all = st.session_state['allocated_pigs']
+        specs_dict = st.session_state['specs_dict']
         
         company_list = sorted([c for c in pigs_all['배정거래처'].unique() if c != '전남지사(잇다)'])
         
@@ -240,7 +250,6 @@ with tab2:
 
             st.markdown("---")
             
-            # 가로 길이 조절 레이아웃 (4:1 비율로 축소)
             col_comp_main, _ = st.columns([4, 1])
             with col_comp_main:
                 selected_company = st.session_state.selected_company
@@ -250,6 +259,36 @@ with tab2:
                 comp_df = pigs_all[pigs_all['배정거래처'] == selected_company].copy()
                 comp_df.reset_index(drop=True, inplace=True)
                 comp_df.index = comp_df.index + 1
+
+                # ----------------- 비고란 스펙 딸림 분석 계산 -----------------
+                spec = specs_dict.get(selected_company, None)
+                remarks = []
+                
+                for idx, row in comp_df.iterrows():
+                    if not spec:
+                        remarks.append("-")
+                        continue
+                    
+                    diffs = []
+                    # 중량 체크
+                    if row['중량'] < spec['w_min']:
+                        diffs.append(f"중량미달({row['중량']}kg < {spec['w_min']}kg)")
+                    elif row['중량'] > spec['w_max']:
+                        diffs.append(f"중량초과({row['중량']}kg > {spec['w_max']}kg)")
+                    
+                    # 등지방 체크
+                    if row['등지방'] < spec['f_min']:
+                        diffs.append(f"등지방미달({row['등지방']}mm < {spec['f_min']}mm)")
+                    elif row['등지방'] > spec['f_max']:
+                        diffs.append(f"등지방초과({row['등지방']}mm > {spec['f_max']}mm)")
+                    
+                    # 등급 체크
+                    if spec['grades'] and str(row['등급']).strip() not in spec['grades']:
+                        diffs.append(f"등급불일치({row['등급']})")
+                    
+                    remarks.append(", ".join(diffs) if diffs else "스펙일치")
+
+                comp_df['비고'] = remarks
                 
                 c_cnt = len(comp_df[comp_df['성별'] == '거세'])
                 f_cnt = len(comp_df[comp_df['성별'] == '암'])
@@ -278,8 +317,8 @@ with tab2:
                     type="primary"
                 )
                 
-                comp_display = comp_df[['도체번호', '성별', '중량', '등지방', '등급', '이력번호', '출하농가']].copy()
-                st.dataframe(comp_display, height=1200, use_container_width=True)
+                comp_display = comp_df[['도체번호', '성별', '중량', '등지방', '등급', '비고', '이력번호', '출하농가']].copy()
+                st.dataframe(style_center_black(comp_display), height=1200, use_container_width=True)
         else:
             st.info("배정된 일반 거래처 내역이 없습니다.")
     else:
@@ -329,15 +368,16 @@ with tab4:
                 else:
                     st.write(f"### 📌 {target_tab} 배정 이력")
                     summary_hist = hist_df.groupby(['배정거래처', '성별']).size().unstack(fill_value=0)
-                    styled_hist = summary_hist.style.set_properties(**{'text-align': 'center'})
+                    summary_hist['합계'] = summary_hist['거세'] + summary_hist['암']
+                    summary_hist = summary_hist[['합계', '거세', '암']]
                     
                     c1, c2 = st.columns([1, 2])
                     with c1:
                         st.write("**거래처별 요약**")
-                        st.dataframe(styled_hist, use_container_width=True)
+                        st.dataframe(style_center_black(summary_hist), use_container_width=True)
                     with c2:
                         st.write("**상세 개체 내역**")
-                        st.dataframe(hist_df, height=600, use_container_width=True)
+                        st.dataframe(style_center_black(hist_df), height=600, use_container_width=True)
             except Exception:
                 st.error(f"❌ [{target_tab}] 날짜로 저장된 구글 시트 탭이 없습니다.")
 
@@ -394,7 +434,7 @@ with tab5:
             st.markdown("---")
             col_jn_main, _ = st.columns([4, 1])
             with col_jn_main:
-                st.dataframe(jn_export, height=750, use_container_width=True)
+                st.dataframe(style_center_black(jn_export), height=750, use_container_width=True)
 
         else:
             st.warning("전남지사로 할당된 물량이 없습니다.")
