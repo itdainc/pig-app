@@ -60,7 +60,7 @@ with tab1:
             df_g = pd.read_excel(uploaded_grade, header=3)
             
             pigs = pd.DataFrame({
-                '도체번호': df_g.iloc[:, 4],
+                '도체번호': pd.to_numeric(df_g.iloc[:, 4], errors='coerce'),
                 '성별': df_g.iloc[:, 7],
                 '중량': pd.to_numeric(df_g.iloc[:, 8], errors='coerce'),
                 '등지방': pd.to_numeric(df_g.iloc[:, 9], errors='coerce'),
@@ -144,7 +144,7 @@ with tab1:
 
             st.session_state['allocated_pigs'] = pigs
 
-            # ----------------- 좌측 배정요약 표 (가운데 정렬 적용) -----------------
+            # ----------------- 좌측 배정요약 표 -----------------
             summary = pigs.groupby(['배정거래처', '성별']).size().unstack(fill_value=0)
             if '거세' not in summary.columns: summary['거세'] = 0
             if '암' not in summary.columns: summary['암'] = 0
@@ -153,7 +153,6 @@ with tab1:
             summary['합계'] = summary['거세'] + summary['암']
             summary.columns.name = None
 
-            # 가운데 정렬 스타일링
             styled_summary = summary.style.set_properties(**{'text-align': 'center'})
 
             st.sidebar.markdown("---")
@@ -172,9 +171,11 @@ with tab1:
 
             st.markdown("---")
             
-            col_main, _ = st.columns([3, 1])
+            # 가로 길이 축소 (4:1 비율 레이아웃)
+            col_main, _ = st.columns([4, 1])
             with col_main:
                 st.subheader("📋 전체 개체별 세부 배정 내역")
+                st.caption("💡 표 상단의 열 이름(도체번호, 성별, 중량 등)을 클릭하면 △/▽ 정렬이 가능합니다.")
                 
                 today_tab_name = datetime.now().strftime("%Y-%m-%d")
                 
@@ -203,21 +204,21 @@ with tab1:
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
 
-                st.dataframe(pigs[['도체번호', '성별', '중량', '등지방', '등급', '배정거래처', '이력번호', '출하농가']], height=750, use_container_width=True)
+                display_df = pigs[['도체번호', '성별', '중량', '등지방', '등급', '배정거래처', '이력번호', '출하농가']].copy()
+                st.dataframe(display_df, height=750, use_container_width=True)
 
         except Exception as e:
             st.error(f"파일 처리 중 오류가 발생했습니다: {e}")
     else:
         st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]만 올려주시면 바로 배정됩니다.")
 
-# ----------------- 탭 2: 거래처별 배정 상세 (밑줄 제거 및 스타일 반영) -----------------
+# ----------------- 탭 2: 거래처별 배정 상세 -----------------
 with tab2:
     st.subheader("🏢 거래처별 개별 배정 내역 및 명단")
     
     if 'allocated_pigs' in st.session_state:
         pigs_all = st.session_state['allocated_pigs']
         
-        # 신규 등록 업체 포함 ㄱㄴㄷ 가나다순 정렬
         company_list = sorted([c for c in pigs_all['배정거래처'].unique() if c != '전남지사(잇다)'])
         
         if company_list:
@@ -239,42 +240,46 @@ with tab2:
 
             st.markdown("---")
             
-            selected_company = st.session_state.selected_company
-            # 밑줄 제거한 제목
-            st.markdown(f"### **[{selected_company}] 배정 명단**")
+            # 가로 길이 조절 레이아웃 (4:1 비율로 축소)
+            col_comp_main, _ = st.columns([4, 1])
+            with col_comp_main:
+                selected_company = st.session_state.selected_company
+                st.markdown(f"### **[{selected_company}] 배정 명단**")
+                st.caption("💡 표 상단의 열 이름(도체번호, 성별, 중량 등)을 클릭하면 △/▽ 정렬이 가능합니다.")
 
-            comp_df = pigs_all[pigs_all['배정거래처'] == selected_company].copy()
-            comp_df.reset_index(drop=True, inplace=True)
-            comp_df.index = comp_df.index + 1
-            
-            c_cnt = len(comp_df[comp_df['성별'] == '거세'])
-            f_cnt = len(comp_df[comp_df['성별'] == '암'])
-            avg_w = comp_df['중량'].mean() if not comp_df.empty else 0
-            avg_f = comp_df['등지방'].mean() if not comp_df.empty else 0
-            
-            m1, m2, m3, m4, m5 = st.columns(5)
-            m1.metric("총 배정 수량", f"{len(comp_df)} 두")
-            m2.metric("거세 수량", f"{c_cnt} 두")
-            m3.metric("암 수량", f"{f_cnt} 두")
-            m4.metric("평균 중량", f"{avg_w:.1f} kg")
-            m5.metric("평균 등지방", f"{avg_f:.1f} mm")
-            
-            st.markdown(" ")
-            
-            output_comp = io.BytesIO()
-            with pd.ExcelWriter(output_comp, engine='openpyxl') as writer:
-                comp_df.to_excel(writer, sheet_name=selected_company)
-            comp_data = output_comp.getvalue()
-            
-            st.download_button(
-                label=f"📥 [{selected_company}] 배정 명단 엑셀 다운로드",
-                data=comp_data,
-                file_name=f"{selected_company}_배정명단.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="primary"
-            )
-            
-            st.dataframe(comp_df[['도체번호', '성별', '중량', '등지방', '등급', '이력번호', '출하농가']], height=600, use_container_width=True)
+                comp_df = pigs_all[pigs_all['배정거래처'] == selected_company].copy()
+                comp_df.reset_index(drop=True, inplace=True)
+                comp_df.index = comp_df.index + 1
+                
+                c_cnt = len(comp_df[comp_df['성별'] == '거세'])
+                f_cnt = len(comp_df[comp_df['성별'] == '암'])
+                avg_w = comp_df['중량'].mean() if not comp_df.empty else 0
+                avg_f = comp_df['등지방'].mean() if not comp_df.empty else 0
+                
+                m1, m2, m3, m4, m5 = st.columns(5)
+                m1.metric("총 배정 수량", f"{len(comp_df)} 두")
+                m2.metric("거세 수량", f"{c_cnt} 두")
+                m3.metric("암 수량", f"{f_cnt} 두")
+                m4.metric("평균 중량", f"{avg_w:.1f} kg")
+                m5.metric("평균 등지방", f"{avg_f:.1f} mm")
+                
+                st.markdown(" ")
+                
+                output_comp = io.BytesIO()
+                with pd.ExcelWriter(output_comp, engine='openpyxl') as writer:
+                    comp_df.to_excel(writer, sheet_name=selected_company)
+                comp_data = output_comp.getvalue()
+                
+                st.download_button(
+                    label=f"📥 [{selected_company}] 배정 명단 엑셀 다운로드",
+                    data=comp_data,
+                    file_name=f"{selected_company}_배정명단.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    type="primary"
+                )
+                
+                comp_display = comp_df[['도체번호', '성별', '중량', '등지방', '등급', '이력번호', '출하농가']].copy()
+                st.dataframe(comp_display, height=1200, use_container_width=True)
         else:
             st.info("배정된 일반 거래처 내역이 없습니다.")
     else:
@@ -387,7 +392,9 @@ with tab5:
             )
 
             st.markdown("---")
-            st.dataframe(jn_export, height=750, use_container_width=True)
+            col_jn_main, _ = st.columns([4, 1])
+            with col_jn_main:
+                st.dataframe(jn_export, height=750, use_container_width=True)
 
         else:
             st.warning("전남지사로 할당된 물량이 없습니다.")
