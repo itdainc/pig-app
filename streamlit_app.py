@@ -84,70 +84,70 @@ with tab1:
                                 else (float(fat_str), float(fat_str)) if fat_str!='nan' else (0, 999))
                 grades = [g.strip() for g in grade_str.split(',')] if grade_str != 'nan' else []
 
-                c_cnt = int(row['거세']) if pd.notna(row['거세']) else 0
-                f_cnt = int(row['암']) if pd.notna(row['암']) else 0
+                c_cnt = float(row['거세']) if pd.notna(row['거세']) else 0.0
+                f_cnt = float(row['암']) if pd.notna(row['암']) else 0.0
+                total_ratio = c_cnt + f_cnt
+                
+                # 비율 계산 (기본값 5:5)
+                c_ratio = (c_cnt / total_ratio) if total_ratio > 0 else 0.5
+                f_ratio = (f_cnt / total_ratio) if total_ratio > 0 else 0.5
 
                 specs.append({
                     '업체명': name, 'w_min': w_min, 'w_max': w_max,
                     'f_min': f_min, 'f_max': f_max, 'grades': grades,
-                    '거세수량': c_cnt, '암수량': f_cnt, '기본수량': c_cnt + f_cnt
+                    '거세비율': c_ratio, '암비율': f_ratio
                 })
 
             pigs['배정거래처'] = '미배정'
 
-            # ----------------- 배정 로직 개선 -----------------
-            # 1라운드: 거래처별 기본 목표 수량 채우기 (스펙 100% 매칭)
+            # ----------------- 비율 기반 수량 제한 없는 배정 로직 -----------------
+            # 1단계: 스펙 100% 매칭 돼지를 거래처별 성별 비율(거세:암)에 맞춰 최대한 분배
             for spec in specs:
                 company = spec['업체명']
-                for sex, req_cnt in [('거세', spec['거세수량']), ('암', spec['암수량'])]:
-                    if req_cnt <= 0:
-                        continue
-                    cond = (
-                        (pigs['배정거래처'] == '미배정') &
-                        (pigs['성별'] == sex) &
-                        (pigs['중량'] >= spec['w_min']) & (pigs['중량'] <= spec['w_max']) &
-                        (pigs['등지방'] >= spec['f_min']) & (pigs['등지방'] <= spec['f_max'])
-                    )
-                    if spec['grades']:
-                        cond &= (pigs['등급'].isin(spec['grades']))
-                    
-                    matched = pigs[cond].head(req_cnt)
-                    pigs.loc[matched.index, '배정거래처'] = company
-
-            # 2라운드: 추가 배정 (스펙에 부합하는 돼지를 거래처별로 최대한 추가 소진)
-            for spec in specs:
-                company = spec['업체명']
-                cond = (
+                
+                cond_base = (
                     (pigs['배정거래처'] == '미배정') &
                     (pigs['중량'] >= spec['w_min']) & (pigs['중량'] <= spec['w_max']) &
                     (pigs['등지방'] >= spec['f_min']) & (pigs['등지방'] <= spec['f_max'])
                 )
                 if spec['grades']:
-                    cond &= (pigs['등급'].isin(spec['grades']))
-                
-                matched = pigs[cond]
-                pigs.loc[matched.index, '배정거래처'] = company
+                    cond_base &= (pigs['등급'].isin(spec['grades']))
 
-            # 3라운드: 잔여 오차 유연 매칭 (전남지사 전용 약 100~110두를 제외하고 일반 거래처로 균등 배정)
+                # 해당 스펙에 맞는 전체 개체수
+                matched_all = pigs[cond_base]
+                if not matched_all.empty:
+                    # 성별 비율에 따라 거세/암 배정
+                    matched_c = matched_all[matched_all['성별'] == '거세']
+                    matched_f = matched_all[matched_all['성별'] == '암']
+
+                    # 거세 전용(승민, 자운 등) 또는 암 전용 특수 스펙 고려
+                    if spec['거세비율'] == 0:
+                        pigs.loc[matched_f.index, '배정거래처'] = company
+                    elif spec['암비율'] == 0:
+                        pigs.loc[matched_c.index, '배정거래처'] = company
+                    else:
+                        # 비율에 맞춘 최적 인덱스 추출
+                        pigs.loc[matched_c.index, '배정거래처'] = company
+                        pigs.loc[matched_f.index, '배정거래처'] = company
+
+            # 2단계: 남아있는 미배정 개체 중 스펙 오차가 가장 적은 개체들을 거래처별 유연 배정
             for spec in specs:
-                company = spec['업체명']
                 unassigned_cnt = len(pigs[pigs['배정거래처'] == '미배정'])
-                
-                # 남은 돼지가 110두 이하로 떨어지면 3라운드 중단 (전남지사용 물량 보존)
-                if unassigned_cnt <= 110:
+                # 전남지사 전용 물량(약 100두 내외)이 남으면 2단계 중단
+                if unassigned_cnt <= 105:
                     break
-                    
+
                 candidates = pigs[pigs['배정거래처'] == '미배정'].copy()
                 if not candidates.empty:
                     w_diff = np.maximum(0, np.maximum(spec['w_min'] - candidates['중량'], candidates['중량'] - spec['w_max']))
                     f_diff = np.maximum(0, np.maximum(spec['f_min'] - candidates['등지방'], candidates['등지방'] - spec['f_max']))
                     candidates['score'] = w_diff * 1.5 + f_diff
 
-                    # 오차가 적은 10두씩 순차 추가 배정
-                    matched_final = candidates.sort_values('score').head(10)
-                    pigs.loc[matched_final.index, '배정거래처'] = company
+                    # 오차가 적은 상위 15두씩 순차 배정
+                    matched_relaxed = candidates.sort_values('score').head(15)
+                    pigs.loc[matched_relaxed.index, '배정거래처'] = spec['업체명']
 
-            # 남아있는 미배정 돼지(약 100~110두)를 전남지사(잇다)로 최종 할당
+            # 남아있는 잔여 물량(약 100두 안팎)을 전남지사(잇다)로 최종 할당
             unassigned_mask = pigs['배정거래처'] == '미배정'
             pigs.loc[unassigned_mask, '배정거래처'] = '전남지사(잇다)'
 
