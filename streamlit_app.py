@@ -10,10 +10,9 @@ except ImportError:
     def check_password(): return True
 
 try:
-    from auto_allocator import DEFAULT_TARGET_COUNTS, get_default_specs, allocate_pigs_data
+    from auto_allocator import DEFAULT_TARGET_COUNTS, allocate_pigs_data
 except ImportError:
-    DEFAULT_TARGET_COUNTS = {}
-    def get_default_specs(custom_targets=None): return []
+    DEFAULT_TARGET_COUNTS = []
     def allocate_pigs_data(file, specs): return pd.DataFrame(), {}
 
 # 로그인 검증
@@ -24,11 +23,8 @@ if check_password():
     if 'main_menu' not in st.session_state:
         st.session_state.main_menu = "배정"
 
-    if 'target_counts' not in st.session_state:
-        st.session_state.target_counts = DEFAULT_TARGET_COUNTS.copy()
-
-    if 'spec_df' not in st.session_state:
-        st.session_state.spec_df = pd.DataFrame(get_default_specs(st.session_state.target_counts))
+    if 'target_df' not in st.session_state:
+        st.session_state.target_df = pd.DataFrame(DEFAULT_TARGET_COUNTS)
 
     # 📌 메인 메뉴 (2개 고정)
     st.sidebar.title("📌 메인 메뉴")
@@ -68,44 +64,50 @@ if check_password():
     if st.session_state.main_menu == "배정":
         st.title("🐖 주식회사 잇다 / 거래처 자동 배정 시스템")
 
-        # 4개의 탭 카테고리 구성
-        tab1, tab2, tab3, tab4 = st.tabs([
-            "⚙️ 목표두수 설정", 
+        # 3개 탭 구성
+        tab1, tab2, tab3 = st.tabs([
             "🚀 자동 배정 실행", 
             "🏢 거래처별 배정 상세", 
             "🚚 잇다 배정"
         ])
 
-        # ----------------- 탭 1: 목표두수 설정 (배정 전 수량 확인 및 변동 반영) -----------------
+        # ----------------- 탭 1: 자동 배정 실행 (수량 조정 접이식 모달 포함) -----------------
         with tab1:
-            st.subheader("⚙️ 거래처별 배정 목표두수 설정")
-            st.info("💡 파일 업로드 후 목표 두수에 변동이 있으면 아래 표에서 수정 후 배정을 실행하세요. 변동이 없으시면 바로 배정 실행 버튼을 누르시면 됩니다.")
-
-            edited_spec_df = st.data_editor(
-                st.session_state.spec_df,
-                num_rows="dynamic",
-                use_container_width=True,
-                height=500,
-                key="target_count_editor",
-                column_config=get_centered_column_config(st.session_state.spec_df)
-            )
+            st.subheader("🚀 자동 배정 연산 실행")
+            
+            # 수량 조절용 접이식 모달 창 (Expander)
+            with st.expander("✏️ 거래처별 목표두수 / 변동두수 수기 조정 (클릭하여 열기)", expanded=False):
+                st.info("💡 목표 두수에 변동이 있으면 아래 표에서 수량을 직접 수정하거나 새로운 거래처를 추가하세요.")
+                edited_target_df = st.data_editor(
+                    st.session_state.target_df,
+                    num_rows="dynamic",
+                    use_container_width=True,
+                    height=350,
+                    key="target_editor",
+                    column_config={"거래처명": st.column_config.Column("거래처명", alignment="center"), "목표두수": st.column_config.Column("목표두수", alignment="center")}
+                )
+                if st.button("💾 두수 변동사항 적용", type="secondary", use_container_width=True):
+                    st.session_state.target_df = edited_target_df
+                    st.success("✅ 목표두수가 업데이트되었습니다. 아래 배정 실행 버튼을 누르세요!")
 
             st.markdown(" ")
-            if st.button("🚀 이 수량으로 자동 배정 실행", type="primary", use_container_width=True):
-                st.session_state.spec_df = edited_spec_df
+            
+            # 자동 배정 실행 버튼
+            if st.button("⚡ 거래처 자동 배정 실행하기", type="primary", use_container_width=True):
                 if uploaded_grade:
                     try:
-                        pigs, specs_dict = allocate_pigs_data(uploaded_grade, st.session_state.spec_df)
+                        pigs, specs_dict = allocate_pigs_data(uploaded_grade, st.session_state.target_df)
                         st.session_state['allocated_pigs'] = pigs
                         st.session_state['specs_dict'] = specs_dict
-                        st.success("✅ 거래처 자동 배정이 완료되었습니다! [🚀 자동 배정 실행] 탭에서 결과를 확인하세요.")
+                        st.success("✅ 자동 배정이 성공적으로 완료되었습니다!")
                     except Exception as e:
                         st.error(f"파일 처리 중 오류가 발생했습니다: {e}")
                 else:
-                    st.warning("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 먼올 업로드해 주세요.")
+                    st.warning("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 먼저 업로드해 주세요.")
 
-        # ----------------- 탭 2: 자동 배정 실행 결과 -----------------
-        with tab2:
+            st.markdown("---")
+
+            # 배정 결과 표시
             if 'allocated_pigs' in st.session_state:
                 pigs = st.session_state['allocated_pigs']
 
@@ -115,7 +117,6 @@ if check_password():
                 c3.metric("잇다 잔여 할당 수량", f"{len(pigs[pigs['배정거래처'].str.contains('잇다', na=False)])} 두")
 
                 st.markdown("---")
-                
                 col_main, _ = st.columns([4, 1])
                 with col_main:
                     st.subheader("📋 전체 개체별 세부 배정 내역")
@@ -143,11 +144,9 @@ if check_password():
                     display_df = pigs[['도체번호', '성별', '중량', '등지방', '등급', '배정거래처', '이력번호', '출하농가']].copy()
                     calc_height = (len(display_df) + 1) * 35 + 10
                     st.dataframe(display_df, height=calc_height, use_container_width=True, column_config=get_centered_column_config(display_df))
-            else:
-                st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드한 후, [⚙️ 목표두수 설정] 탭에서 배정 실행 버튼을 눌러주세요.")
 
-        # ----------------- 탭 3: 거래처별 배정 상세 -----------------
-        with tab3:
+        # ----------------- 탭 2: 거래처별 배정 상세 -----------------
+        with tab2:
             st.subheader("🏢 거래처별 개별 배정 내역 및 명단")
             if 'allocated_pigs' in st.session_state and 'specs_dict' in st.session_state:
                 pigs_all = st.session_state['allocated_pigs']
@@ -232,8 +231,8 @@ if check_password():
             else:
                 st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
 
-        # ----------------- 탭 4: 잇다 배정 (잇다 1 / 잇다 2) -----------------
-        with tab4:
+        # ----------------- 탭 3: 잇다 배정 (잇다 1 / 잇다 2) -----------------
+        with tab3:
             st.subheader("🚚 잇다 배정 내역")
             if 'allocated_pigs' in st.session_state:
                 pigs_all = st.session_state['allocated_pigs']
