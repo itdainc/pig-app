@@ -51,17 +51,43 @@ def get_centered_column_config(df):
         )
     return config
 
-# ----------------- 탭 구성 -----------------
+# ----------------- 탭 구성 (요청: 거래처 스펙 관리를 맨 앞으로 이동) -----------------
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "⚙️ 거래처 스펙 관리", 
     "🚀 자동 배정 실행", 
     "🏢 거래처별 배정 상세",
-    "⚙️ 거래처 스펙 관리", 
     "📅 배정 이력 조회 (구글 시트)",
     "🚚 전남지사 배정 (잇다)"
 ])
 
-# ----------------- 탭 1: 자동 배정 -----------------
+# ----------------- 탭 1: 거래처 스펙 관리 (맨 앞으로 이동) -----------------
 with tab1:
+    st.subheader("⚙️ 등록된 거래처 스펙 수정 및 추가 (구글 시트 연동)")
+    st.write("표 안의 셀을 클릭하여 숫자를 수정하거나 항목을 추가/삭제할 수 있습니다.")
+
+    col_spec, _ = st.columns([3, 2])
+    with col_spec:
+        edited_df = st.data_editor(
+            st.session_state.spec_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            height=600,
+            key="spec_editor"
+        )
+
+        if st.button("💾 구글 시트에 스펙 변경사항 저장", type="primary"):
+            try:
+                if conn is None:
+                    raise Exception("Secrets 필요")
+                conn.update(worksheet="스펙", data=edited_df)
+                st.session_state.spec_df = edited_df
+                st.success("거래처 스펙 변경 사항이 구글 시트 ['스펙'] 탭에 성공적으로 동기화되었습니다!")
+            except Exception:
+                st.session_state.spec_df = edited_df
+                st.success("스펙이 임시 반영되었습니다.")
+
+# ----------------- 탭 2: 자동 배정 실행 -----------------
+with tab2:
     st.sidebar.header("📁 파일 업로드")
     uploaded_grade = st.sidebar.file_uploader("1. 등급판정 결과 파일 (.xls/.xlsx)", type=["xls", "xlsx"])
 
@@ -234,8 +260,8 @@ with tab1:
     else:
         st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]만 올려주시면 바로 배정됩니다.")
 
-# ----------------- 탭 2: 거래처별 배정 상세 -----------------
-with tab2:
+# ----------------- 탭 3: 거래처별 배정 상세 -----------------
+with tab3:
     st.subheader("🏢 거래처별 개별 배정 내역 및 명단")
     
     if 'allocated_pigs' in st.session_state and 'specs_dict' in st.session_state:
@@ -277,12 +303,10 @@ with tab2:
                 comp_df.reset_index(drop=True, inplace=True)
                 comp_df.index = comp_df.index + 1
 
-                # 소수점 깔끔하게 정리
                 comp_df['도체번호'] = comp_df['도체번호'].astype(int)
                 comp_df['중량'] = comp_df['중량'].round(1)
                 comp_df['등지방'] = comp_df['등지방'].round(1)
 
-                # 비고란 스펙 분석
                 remarks = []
                 for idx, row in comp_df.iterrows():
                     if not spec:
@@ -345,32 +369,6 @@ with tab2:
             st.info("배정된 일반 거래처 내역이 없습니다.")
     else:
         st.info("👈 [🚀 자동 배정 실행] 탭에서 등급판정 파일을 먼저 업로드해 주세요.")
-
-# ----------------- 탭 3: 거래처 스펙 관리 -----------------
-with tab3:
-    st.subheader("⚙️ 등록된 거래처 스펙 수정 및 추가 (구글 시트 연동)")
-    st.write("표 안의 셀을 클릭하여 숫자를 수정하거나 항목을 추가/삭제할 수 있습니다.")
-
-    col_spec, _ = st.columns([3, 2])
-    with col_spec:
-        edited_df = st.data_editor(
-            st.session_state.spec_df,
-            num_rows="dynamic",
-            use_container_width=True,
-            height=600,
-            key="spec_editor"
-        )
-
-        if st.button("💾 구글 시트에 스펙 변경사항 저장", type="primary"):
-            try:
-                if conn is None:
-                    raise Exception("Secrets 필요")
-                conn.update(worksheet="스펙", data=edited_df)
-                st.session_state.spec_df = edited_df
-                st.success("거래처 스펙 변경 사항이 구글 시트 ['스펙'] 탭에 성공적으로 동기화되었습니다!")
-            except Exception:
-                st.session_state.spec_df = edited_df
-                st.success("스펙이 임시 반영되었습니다.")
 
 # ----------------- 탭 4: 배정 이력 조회 -----------------
 with tab4:
