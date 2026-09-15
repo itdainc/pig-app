@@ -70,7 +70,7 @@ def get_centered_column_config(df):
             config[col] = st.column_config.Column(col, alignment="center")
     return config
 
-# ----------------- 파일 업로드 시에만 데이터 동적 파싱 -----------------
+# ----------------- 파일 업로드 시 동적 파싱 및 배정 로직 -----------------
 if uploaded_grade:
     try:
         raw_df = pd.read_excel(uploaded_grade, header=None)
@@ -137,7 +137,10 @@ if uploaded_grade:
         for idx, row in st.session_state.spec_df.iterrows():
             name = str(row['업체명']).strip()
             prio = int(row['우선순위']) if pd.notna(row['우선순위']) else 99
-            target_cnt = int(row['목표두수']) if pd.notna(row['목표두수']) else 0
+            base_target = int(row['목표두수']) if pd.notna(row['목표두수']) else 0
+            
+            # 목표두수 ±10% 허용범위 설정
+            max_target = int(round(base_target * 1.10)) if base_target > 0 else 0
             
             weight_str = str(row['중량(kg)'])
             fat_str = str(row['등지방(mm)'])
@@ -157,7 +160,7 @@ if uploaded_grade:
             c_ratio_val = 1.0 - f_ratio_val
 
             spec_obj = {
-                '업체명': name, '우선순위': prio, '목표두수': target_cnt,
+                '업체명': name, '우선순위': prio, '목표두수': base_target, '최대목표두수': max_target,
                 'w_min': w_min, 'w_max': w_max,
                 'f_min': f_min, 'f_max': f_max, 'grades': grades,
                 '암비율_val': f_ratio_val, '거세비율_val': c_ratio_val,
@@ -171,9 +174,10 @@ if uploaded_grade:
 
         pigs['배정거래처'] = '미배정'
 
+        # 1차 배정: 목표두수 (+10% 상한선 적용)
         for spec in specs:
             company = spec['업체명']
-            target = spec['목표두수']
+            target = spec['최대목표두수']
             if target <= 0:
                 continue
 
@@ -219,8 +223,26 @@ if uploaded_grade:
                     matched_relaxed = candidates.sort_values('score').head(needed)
                     pigs.loc[matched_relaxed.index, '배정거래처'] = company
 
-        unassigned_mask = pigs['배정거래처'] == '미배정'
-        pigs.loc[unassigned_mask, '배정거래처'] = '잇다'
+        # 잔여 물량 기본 배정: '잇다' (최대 110두 제한)
+        unassigned_indices = pigs[pigs['배정거래처'] == '미배정'].index
+        ita_indices = unassigned_indices[:110] # 최대 110두까지
+        pigs.loc[ita_indices, '배정거래처'] = '잇다'
+
+        # 110두 초과 잔여기체 발생 시 추가 흡수
+        over_indices = unassigned_indices[110:]
+        if len(over_indices) > 0:
+            for spec in specs:
+                comp = spec['업체명']
+                if len(over_indices) == 0:
+                    break
+                rem_needed = spec['최대목표두수'] - len(pigs[pigs['배정거래처'] == comp])
+                if rem_needed > 0:
+                    assign_now = over_indices[:rem_needed]
+                    pigs.loc[assign_now, '배정거래처'] = comp
+                    over_indices = over_indices[rem_needed:]
+
+            # 완벽 미배정 건 최종 정리
+            pigs.loc[pigs['배정거래처'] == '미배정', '배정거래처'] = '잇다'
 
         st.session_state['allocated_pigs'] = pigs
         st.session_state['specs_dict'] = specs_dict
@@ -258,7 +280,7 @@ if st.session_state.main_menu == "배정":
 
     # ----------------- 탭 2: 자동 배정 실행 -----------------
     with tab2:
-        if 'allocated_pigs' in st.session_state:
+        if 'allocated_pigs' in st.session_state and uploaded_grade:
             pigs = st.session_state['allocated_pigs']
 
             total_pigs = len(pigs)
@@ -311,7 +333,7 @@ if st.session_state.main_menu == "배정":
     with tab3:
         st.subheader("🏢 거래처별 개별 배정 내역 및 명단")
         
-        if 'allocated_pigs' in st.session_state and 'specs_dict' in st.session_state:
+        if 'allocated_pigs' in st.session_state and 'specs_dict' in st.session_state and uploaded_grade:
             pigs_all = st.session_state['allocated_pigs']
             specs_dict = st.session_state['specs_dict']
             
@@ -430,7 +452,7 @@ if st.session_state.main_menu == "배정":
     with tab4:
         st.subheader("🚚 잇다 배정")
         
-        if 'allocated_pigs' in st.session_state:
+        if 'allocated_pigs' in st.session_state and uploaded_grade:
             pigs_all = st.session_state['allocated_pigs']
             jn_df = pigs_all[pigs_all['배정거래처'] == '잇다'].copy()
             
@@ -495,12 +517,12 @@ if st.session_state.main_menu == "배정":
             st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
 
 # ==============================================================================
-# [메뉴 2] 농가 분석 (실제 지육율 수식 = 중량 / 생체 * 100 적용)
+# [메뉴 2] 농가 분석 (업로드된 파일 기반 집계 연산)
 # ==============================================================================
 elif st.session_state.main_menu == "농가분석":
     st.title("📊 농가별 출하 및 스펙 분석")
     
-    if 'allocated_pigs' in st.session_state:
+    if 'allocated_pigs' in st.session_state and uploaded_grade:
         pigs_all = st.session_state['allocated_pigs'].copy()
         
         def extract_feed_and_farm(val):
@@ -519,11 +541,8 @@ elif st.session_state.main_menu == "농가분석":
             head_cnt = len(group)
             total_weight = group['중량'].sum()
             
-            # 대표 지육율 환산 계수로 생체중 수식 역산
             dressing_rate_val = 76.32
             live_weight = total_weight / (dressing_rate_val / 100.0)
-            
-            # 실제 지육율 계산 공식: 중량 / 생체중 * 100
             real_dressing_rate = (total_weight / live_weight * 100) if live_weight > 0 else 0.0
 
             avg_live_weight = live_weight / head_cnt if head_cnt > 0 else 0
@@ -575,7 +594,6 @@ elif st.session_state.main_menu == "농가분석":
 
         analysis_df = pd.DataFrame(rows)
 
-        # ----------------- 총합계 수식 집계 -----------------
         total_head = len(pigs_all)
         total_w = pigs_all['중량'].sum()
         total_live = total_w / (76.32 / 100.0)
