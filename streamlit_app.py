@@ -493,7 +493,7 @@ if st.session_state.main_menu == "배정":
             st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
 
 # ==============================================================================
-# [메뉴 2] 농가 분석 (요청사항 100% 반영: 지육환산 열 삭제, 높이 맞춤)
+# [메뉴 2] 농가 분석 (요청사항 반영: 등외 제거, 쉼표 포맷, 볼드 합계, 인덱스 숨김)
 # ==============================================================================
 elif st.session_state.main_menu == "농가분석":
     st.title("📊 농가별 출하 및 스펙 분석")
@@ -501,12 +501,11 @@ elif st.session_state.main_menu == "농가분석":
     if 'allocated_pigs' in st.session_state:
         pigs_all = st.session_state['allocated_pigs'].copy()
         
-        # 사료사 / 농가 분리
         def extract_feed_and_farm(val):
             s_val = str(val).strip()
             if '/' in s_val:
                 parts = s_val.split('/')
-                return parts[1], parts[0] # 농가, 사료사
+                return parts[1], parts[0]
             return s_val, '-'
 
         pigs_all[['농가_명', '사료사_명']] = pigs_all['출하농가'].apply(lambda x: pd.Series(extract_feed_and_farm(x)))
@@ -533,7 +532,6 @@ elif st.session_state.main_menu == "농가분석":
             p_plus = group[group['등급'] == '1+']
             p_1 = group[group['등급'] == '1']
             p_2 = group[group['등급'] == '2']
-            p_ex = group[group['등급'].isin(['등외', '3'])]
 
             cnt_1plus = len(p_plus)
             w_1plus = p_plus['중량'].sum()
@@ -544,81 +542,82 @@ elif st.session_state.main_menu == "농가분석":
             cnt_2 = len(p_2)
             w_2 = p_2['중량'].sum()
 
-            cnt_ex = len(p_ex)
-            w_ex = p_ex['중량'].sum()
-
             ratio_top_grade = ((cnt_1plus + cnt_1) / head_cnt * 100) if head_cnt > 0 else 0
 
             rows.append({
                 '농가': farm_name,
                 '사료사': feed_name,
-                '두수': head_cnt,
-                '중량': int(round(total_weight)),
-                '생체': int(round(live_weight)),
-                '생체평균': round(avg_live_weight, 2),
-                '도체 kg': round(avg_carcass_weight, 1),
-                '등지방 mm': round(avg_fat, 1),
+                '두수': f"{head_cnt:,}",
+                '중량': f"{int(round(total_weight)):,}",
+                '생체': f"{int(round(live_weight)):,}",
+                '생체평균': f"{avg_live_weight:.2f}",
+                '도체 kg': f"{avg_carcass_weight:.1f}",
+                '등지방 mm': f"{avg_fat:.1f}",
                 '지육율': f"{dressing_rate:.2f}%",
-                '86~96,19~23': spec_target_cnt,
+                '86~96,19~23': f"{spec_target_cnt:,}",
                 '스펙비율': f"{spec_target_ratio:.1f}%",
-                '암': female_cnt,
-                '1+': cnt_1plus,
-                '1+ 중량': int(round(w_1plus)),
-                '1': cnt_1,
-                '1 중량': int(round(w_1)),
-                '2': cnt_2,
-                '2 중량': int(round(w_2)),
-                '1+,1 비율': f"{ratio_top_grade:.2f}%",
-                '등외': cnt_ex,
-                '등외 중량': int(round(w_ex))
+                '암': f"{female_cnt:,}",
+                '1+': f"{cnt_1plus:,}",
+                '1+ 중량': f"{int(round(w_1plus)):,}",
+                '1': f"{cnt_1:,}",
+                '1 중량': f"{int(round(w_1)):,}",
+                '2': f"{cnt_2:,}",
+                '2 중량': f"{int(round(w_2)):,}",
+                '1+,1 비율': f"{ratio_top_grade:.2f}%"
             })
 
         analysis_df = pd.DataFrame(rows)
 
-        # ----------------- 합계 행 -----------------
-        total_head = analysis_df['두수'].sum()
-        total_w = analysis_df['중량'].sum()
-        total_live = analysis_df['생체'].sum()
+        # ----------------- 합계 행 (볼드체 적용) -----------------
+        total_head = len(pigs_all)
+        total_w = pigs_all['중량'].sum()
+        dressing_rate = 76.32
+        total_live = total_w / (dressing_rate / 100.0)
         avg_live_tot = total_live / total_head if total_head > 0 else 0
         avg_carcass_tot = total_w / total_head if total_head > 0 else 0
         avg_fat_tot = pigs_all['등지방'].mean()
         
-        tot_spec_cnt = analysis_df['86~96,19~23'].sum()
+        tot_spec = pigs_all[(pigs_all['중량'] >= 86) & (pigs_all['중량'] <= 96) & (pigs_all['등지방'] >= 19) & (pigs_all['등지방'] <= 23)]
+        tot_spec_cnt = len(tot_spec)
         tot_spec_ratio = (tot_spec_cnt / total_head * 100) if total_head > 0 else 0
 
-        tot_female = analysis_df['암'].sum()
-        tot_1plus = analysis_df['1+'].sum()
-        tot_1plus_w = analysis_df['1+ 중량'].sum()
-        tot_1 = analysis_df['1'].sum()
-        tot_1_w = analysis_df['1 중량'].sum()
-        tot_2 = analysis_df['2'].sum()
-        tot_2_w = analysis_df['2 중량'].sum()
-        tot_ex = analysis_df['등외'].sum()
-        tot_ex_w = analysis_df['등외 중량'].sum()
+        tot_female = len(pigs_all[pigs_all['성별'] == '암'])
+        
+        p_plus_tot = pigs_all[pigs_all['등급'] == '1+']
+        p_1_tot = pigs_all[pigs_all['등급'] == '1']
+        p_2_tot = pigs_all[pigs_all['등급'] == '2']
+
+        tot_1plus = len(p_plus_tot)
+        tot_1plus_w = p_plus_tot['중량'].sum()
+
+        tot_1 = len(p_1_tot)
+        tot_1_w = p_1_tot['중량'].sum()
+
+        tot_2 = len(p_2_tot)
+        tot_2_w = p_2_tot['중량'].sum()
+
         tot_top_ratio = ((tot_1plus + tot_1) / total_head * 100) if total_head > 0 else 0
 
         sum_row = pd.DataFrame([{
-            '농가': '합계',
-            '사료사': '-',
-            '두수': total_head,
-            '중량': total_w,
-            '생체': total_live,
-            '생체평균': round(avg_live_tot, 2),
-            '도체 kg': round(avg_carcass_tot, 1),
-            '등지방 mm': round(avg_fat_tot, 1),
-            '지육율': '76.32%',
-            '86~96,19~23': tot_spec_cnt,
-            '스펙비율': f"{tot_spec_ratio:.1f}%",
-            '암': tot_female,
-            '1+': tot_1plus,
-            '1+ 중량': tot_1plus_w,
-            '1': tot_1,
-            '1 중량': tot_1_w,
-            '2': tot_2,
-            '2 중량': tot_2_w,
-            '1+,1 비율': f"{tot_top_ratio:.2f}%",
-            '등외': tot_ex,
-            '등외 중량': tot_ex_w
+            '농가': '**합계**',
+            '사료사': '**-**',
+            '두수': f"**{total_head:,}**",
+            '중량': f"**{int(round(total_w)):,}**",
+            '생체': f"**{int(round(total_live)):,}**",
+            '생체평균': f"**{avg_live_tot:.2f}**",
+            '도체 kg': f"**{avg_carcass_tot:.1f}**",
+            '등지방 mm': f"**{avg_fat_tot:.1f}**",
+            '지육율': '**76.32%**',
+            '86~96,19~23': f"**{tot_spec_cnt:,}**",
+            '스펙비율': f"**{tot_spec_ratio:.1f}%**",
+            '암': f"**{tot_female:,}**",
+            '1+': f"**{tot_1plus:,}**",
+            '1+ 중량': f"**{int(round(tot_1plus_w)):,}**",
+            '1': f"**{tot_1:,}**",
+            '1 중량': f"**{int(round(tot_1_w)):,}**",
+            '2': f"**{tot_2:,}**",
+            '2 중량': f"**{int(round(tot_2_w)):,}**",
+            '1+,1 비율': f"**{tot_top_ratio:.2f}%**"
         }])
 
         final_analysis_df = pd.concat([analysis_df, sum_row], ignore_index=True)
@@ -637,13 +636,14 @@ elif st.session_state.main_menu == "농가분석":
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-        # 행 개수에 맞춰 남는 스크롤 표 없이 딱 들어맞게 세로 높이 자동 계산 (기본 35px * 행수 + 헤더)
-        calc_height = (len(final_analysis_df) + 1) * 38 + 10
+        # 딱 맞춘 높이 (남는 빈 표 행 없음)
+        calc_height = (len(final_analysis_df) + 1) * 36 + 5
 
         st.dataframe(
             final_analysis_df, 
             height=calc_height, 
             use_container_width=True,
+            hide_index=True,
             column_config=get_centered_column_config(final_analysis_df)
         )
 
