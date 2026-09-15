@@ -41,9 +41,10 @@ except Exception:
 if 'spec_df' not in st.session_state:
     st.session_state.spec_df = spec_df
 
-# ----------------- 탭 구성 -----------------
-tab1, tab2, tab3, tab4 = st.tabs([
+# ----------------- 탭 구성 (요청 반영) -----------------
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🚀 자동 배정 실행", 
+    "🏢 거래처별 배정 상세",
     "⚙️ 거래처 스펙 관리", 
     "📅 배정 이력 조회 (구글 시트)",
     "🚚 전남지사 배정 (잇다)"
@@ -88,7 +89,6 @@ with tab1:
                 f_cnt = float(row['암']) if pd.notna(row['암']) else 0.0
                 total_ratio = c_cnt + f_cnt
                 
-                # 비율 계산 (기본값 5:5)
                 c_ratio = (c_cnt / total_ratio) if total_ratio > 0 else 0.5
                 f_ratio = (f_cnt / total_ratio) if total_ratio > 0 else 0.5
 
@@ -100,8 +100,8 @@ with tab1:
 
             pigs['배정거래처'] = '미배정'
 
-            # ----------------- 비율 기반 수량 제한 없는 배정 로직 -----------------
-            # 1단계: 스펙 100% 매칭 돼지를 거래처별 성별 비율(거세:암)에 맞춰 최대한 분배
+            # ----------------- 비율 기반 배정 로직 -----------------
+            # 1단계: 스펙 100% 매칭 소진
             for spec in specs:
                 company = spec['업체명']
                 
@@ -113,27 +113,22 @@ with tab1:
                 if spec['grades']:
                     cond_base &= (pigs['등급'].isin(spec['grades']))
 
-                # 해당 스펙에 맞는 전체 개체수
                 matched_all = pigs[cond_base]
                 if not matched_all.empty:
-                    # 성별 비율에 따라 거세/암 배정
                     matched_c = matched_all[matched_all['성별'] == '거세']
                     matched_f = matched_all[matched_all['성별'] == '암']
 
-                    # 거세 전용(승민, 자운 등) 또는 암 전용 특수 스펙 고려
                     if spec['거세비율'] == 0:
                         pigs.loc[matched_f.index, '배정거래처'] = company
                     elif spec['암비율'] == 0:
                         pigs.loc[matched_c.index, '배정거래처'] = company
                     else:
-                        # 비율에 맞춘 최적 인덱스 추출
                         pigs.loc[matched_c.index, '배정거래처'] = company
                         pigs.loc[matched_f.index, '배정거래처'] = company
 
-            # 2단계: 남아있는 미배정 개체 중 스펙 오차가 가장 적은 개체들을 거래처별 유연 배정
+            # 2단계: 스펙 유사도 유연 소진 (약 105두 잔여시 중단)
             for spec in specs:
                 unassigned_cnt = len(pigs[pigs['배정거래처'] == '미배정'])
-                # 전남지사 전용 물량(약 100두 내외)이 남으면 2단계 중단
                 if unassigned_cnt <= 105:
                     break
 
@@ -143,11 +138,10 @@ with tab1:
                     f_diff = np.maximum(0, np.maximum(spec['f_min'] - candidates['등지방'], candidates['등지방'] - spec['f_max']))
                     candidates['score'] = w_diff * 1.5 + f_diff
 
-                    # 오차가 적은 상위 15두씩 순차 배정
                     matched_relaxed = candidates.sort_values('score').head(15)
                     pigs.loc[matched_relaxed.index, '배정거래처'] = spec['업체명']
 
-            # 남아있는 잔여 물량(약 100두 안팎)을 전남지사(잇다)로 최종 할당
+            # 남아있는 잔여 물량을 전남지사(잇다)로 최종 할당
             unassigned_mask = pigs['배정거래처'] == '미배정'
             pigs.loc[unassigned_mask, '배정거래처'] = '전남지사(잇다)'
 
@@ -216,8 +210,57 @@ with tab1:
     else:
         st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]만 올려주시면 바로 배정됩니다.")
 
-# ----------------- 탭 2: 거래처 스펙 관리 -----------------
+# ----------------- 탭 2: 거래처별 배정 상세 (신규 추가) -----------------
 with tab2:
+    st.subheader("🏢 거래처별 개별 배정 내역 및 명단")
+    
+    if 'allocated_pigs' in st.session_state:
+        pigs_all = st.session_state['allocated_pigs']
+        company_list = [c for c in pigs_all['배정거래처'].unique() if c != '전남지사(잇다)']
+        
+        if company_list:
+            selected_company = st.selectbox("📌 조회 및 출력할 거래처 선택:", company_list)
+            
+            comp_df = pigs_all[pigs_all['배정거래처'] == selected_company].copy()
+            comp_df.reset_index(drop=True, inplace=True)
+            comp_df.index = comp_df.index + 1
+            
+            c_cnt = len(comp_df[comp_df['성별'] == '거세'])
+            f_cnt = len(comp_df[comp_df['성별'] == '암'])
+            avg_w = comp_df['중량'].mean() if not comp_df.empty else 0
+            avg_f = comp_df['등지방'].mean() if not comp_df.empty else 0
+            
+            m1, m2, m3, m4, m5 = st.columns(5)
+            m1.metric("총 배정 수량", f"{len(comp_df)} 두")
+            m2.metric("거세 수량", f"{c_cnt} 두")
+            m3.metric("암 수량", f"{f_cnt} 두")
+            m4.metric("평균 중량", f"{avg_w:.1f} kg")
+            m5.metric("평균 등지방", f"{avg_f:.1f} mm")
+            
+            st.markdown("---")
+            
+            # 개별 거래처 엑셀 다운로드
+            output_comp = io.BytesIO()
+            with pd.ExcelWriter(output_comp, engine='openpyxl') as writer:
+                comp_df.to_excel(writer, sheet_name=selected_company)
+            comp_data = output_comp.getvalue()
+            
+            st.download_button(
+                label=f"📥 {selected_company} 전달용 엑셀 다운로드",
+                data=comp_data,
+                file_name=f"{selected_company}_배정명단.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary"
+            )
+            
+            st.dataframe(comp_df[['도체번호', '성별', '중량', '등지방', '등급', '이력번호', '출하농가']], height=650, use_container_width=True)
+        else:
+            st.info("배정된 일반 거래처 내역이 없습니다.")
+    else:
+        st.info("👈 [🚀 자동 배정 실행] 탭에서 등급판정 파일을 먼저 업로드해 주세요.")
+
+# ----------------- 탭 3: 거래처 스펙 관리 -----------------
+with tab3:
     st.subheader("⚙️ 등록된 거래처 스펙 수정 및 추가 (구글 시트 연동)")
     st.write("표 안의 셀을 클릭하여 숫자를 수정하거나 항목을 추가/삭제할 수 있습니다.")
 
@@ -242,8 +285,8 @@ with tab2:
                 st.session_state.spec_df = edited_df
                 st.success("스펙이 임시 반영되었습니다.")
 
-# ----------------- 탭 3: 배정 이력 조회 -----------------
-with tab3:
+# ----------------- 탭 4: 배정 이력 조회 -----------------
+with tab4:
     st.subheader("📅 구글 시트 날짜별(탭별) 배정 이력 조회")
     try:
         if conn is None:
@@ -274,8 +317,8 @@ with tab3:
     except Exception:
         st.info("💡 구글 시트 연동 완료 시 날짜별 이력 조회가 가능합니다.")
 
-# ----------------- 탭 4: 전남지사 배정 (잇다) -----------------
-with tab4:
+# ----------------- 탭 5: 전남지사 배정 (잇다) -----------------
+with tab5:
     st.subheader("🚚 전남지사(잇다) 전달용 표 및 엑셀 다운로드")
     
     if 'allocated_pigs' in st.session_state:
