@@ -143,7 +143,7 @@ if check_password():
                     })
                     
                     st.table(analysis_table)
-                    st.info(f"💡 **분석 범위:** 7번째 행 이하 데이터 (I열 중량 / J열 등지방 / W열 등급) | **총 입고두수:** {tot_cnt:,}두 (마장동(1/1+등급): {c1_cnt:,}두 / 두꺼운 지육: {c2_cnt:,}두 / 얇은·소형: {c3_cnt:,}두)")
+                    st.info(f"💡 **총 입고두수:** {tot_cnt:,}두 (마장동(1/1+등급): {c1_cnt:,}두 / 두꺼운 지육: {c2_cnt:,}두 / 얇은·소형: {c3_cnt:,}두)")
                 except Exception as e:
                     st.error(f"등급판정 파일 분석 중 오류 발생: {e}")
             else:
