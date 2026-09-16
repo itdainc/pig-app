@@ -59,7 +59,7 @@ if check_password():
         st.session_state.main_menu = "배정"
 
     # ------------------------------------------------------------------------------
-    # 💡 조건표 동기화 및 세부 항목 초기화
+    # 💡 조건표 동기화 및 세부 항목 초기화 (KeyError 방지)
     # ------------------------------------------------------------------------------
     df_cond = get_company_conditions_df()
     current_cond_companies = list(df_cond['거래처']) if not df_cond.empty else []
@@ -72,7 +72,10 @@ if check_password():
     )
 
     if not is_target_valid:
-        st.session_state.target_df = df_cond.copy()
+        if not df_cond.empty:
+            st.session_state.target_df = df_cond.copy()
+        else:
+            st.session_state.target_df = pd.DataFrame(columns=['거래처', '목표두수'])
 
     # 📌 사이드바 메뉴
     st.sidebar.title("📌 메인 메뉴")
@@ -88,6 +91,17 @@ if check_password():
     st.sidebar.markdown("---")
     st.sidebar.header("📁 파일 업로드")
     uploaded_grade = st.sidebar.file_uploader("1. 등급판정 결과 파일 (.xls/.xlsx)", type=["xls", "xlsx"])
+
+    st.sidebar.markdown("---")
+
+    # 💡 시스템 초기화 (메모리 리프레쉬) 버튼
+    if st.sidebar.button("🔄 시스템 초기화", use_container_width=True):
+        keys_to_clear = ['target_df', 'allocated_pigs']
+        for key in keys_to_clear:
+            if key in st.session_state:
+                del st.session_state[key]
+        st.success("✅ 시스템 메모리가 완전히 초기화되었습니다.")
+        st.rerun()
 
     if st.sidebar.button("🔒 로그아웃", use_container_width=True):
         st.session_state["password_correct"] = False
@@ -193,7 +207,7 @@ if check_password():
 
             if st.button("💾 변경사항 적용 및 재연산", type="primary", use_container_width=True):
                 st.session_state.target_df = edited_target_df
-                st.success("✅ 거래처별 세부 배정 조건이 업데이트되었습니다.")
+                st.success("✅ 거래처별 세부 배정 조건이 업데이트되었습니다. 아래 3번 항목에 즉시 적용되었습니다.")
                 st.rerun()
 
             st.markdown("---")
@@ -221,6 +235,7 @@ if check_password():
                         
                         display_summary = comp_summary[['거래처명', '목표두수', '1차 배정두수', '부족두수']]
                         
+                        # 💡 부족두수 > 0 인 행 하이라이트 표시
                         def highlight_shortage(row):
                             if row['부족두수'] > 0:
                                 return ['background-color: rgba(255, 75, 75, 0.2); color: #ff4b4b; font-weight: bold;'] * len(row)
@@ -242,6 +257,7 @@ if check_password():
                             summary.to_excel(writer, sheet_name='요약')
                         processed_data = output.getvalue()
                         
+                        # 💡 표출 컬럼 깔끔하게 일계 정제 (원본/숫자 텍스트 제거)
                         display_df = pigs[[1, 'w_num', 'f_num', 'grade_str', '배정거래처']].copy()
                         display_df.columns = ['도체번호', '중량', '등지방', '등급', '배정거래처']
                         calc_height = (len(display_df) + 1) * 35 + 10
