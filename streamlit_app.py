@@ -162,7 +162,7 @@ if check_password():
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                             )
 
-                    # 1차 배정 미분류 내역 및 엑셀 다운로드 버튼 (버튼 위치를 표 아래로 변경)
+                    # 1차 배정 미분류 내역
                     if not unallocated_df.empty:
                         with st.expander("⚠️ 1차 배정 미분류 (잔여 물량) 내역 보기", expanded=False):
                             today_str = datetime.now().strftime("%Y-%m-%d")
@@ -179,8 +179,8 @@ if check_password():
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                             )
 
-                    # 전체 개체별 세부 배정 내역 (버튼 위치를 표 아래로 변경)
-                    with st.expander("📋 전체 개체별 세부 배정 내역 보기", expanded=False):
+                    # 1차 배정 내역보기 문구 변경 적용
+                    with st.expander("📋 1차 배정 내역보기(스팩 100% 일치)", expanded=False):
                         today_str = datetime.now().strftime("%Y-%m-%d")
                         summary = pigs.groupby(['배정거래처']).size().reset_index(name='수량')
 
