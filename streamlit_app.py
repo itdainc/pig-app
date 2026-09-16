@@ -90,7 +90,8 @@ if check_password():
                     df_raw = load_excel_by_coords(uploaded_grade)
                     df_valid = df_raw.dropna(subset=['w_num', 'f_num'])
                     
-                    pigs, unallocated_df, _ = run_100pct_strict_allocation(df_valid)
+                    # 💡 백그라운드 연산 시 summary_df(요약표 데이터)를 함께 받아옵니다.
+                    pigs, unallocated_df, summary_df = run_100pct_strict_allocation(df_valid)
                     st.session_state['allocated_pigs'] = pigs
                     
                     cond1 = (
@@ -151,6 +152,14 @@ if check_password():
                     c2.metric("1차 배정 완료 수량", f"{len(pigs[pigs['배정거래처'] != '미분류'])} 두")
                     c3.metric("미분류 (잔여 물량)", f"{len(unallocated_df)} 두")
                     
+                    # 💡 새로 추가된 [업체별 1차 배정 달성 요약] 표
+                    st.markdown("#### 📊 업체별 1차 배정 달성 요약")
+                    if not summary_df.empty:
+                        # 미분류 행을 제외하고 화면에 출력
+                        comp_summary = summary_df[summary_df['거래처명'] != '미분류 (잔여 물량)']
+                        display_summary = comp_summary[['배정순서', '거래처명', '목표두수', '1차 배정두수', '달성률']]
+                        st.dataframe(display_summary, use_container_width=True, hide_index=True)
+
                     # 1. 1차 배정 내역보기 (상단 배치)
                     with st.expander("📋 1차 배정 내역보기(스팩 100% 일치)", expanded=False):
                         today_str = datetime.now().strftime("%Y-%m-%d")
