@@ -46,7 +46,18 @@ def load_excel_by_coords(file):
       .str.replace(r'\.0$', '', regex=True)
   )
 
-  # L열(11) ~ U열(20) 하자 여부 판별 (빈칸이면 하자 없음)
+  # 💡 AJ열 (0기준 35번 인덱스): 출하자명(농가명) 추출 (배제농가 로직용)
+  if df.shape[1] > 35:
+    df['farm_name'] = (
+        df.iloc[:, 35]
+        .astype(str)
+        .str.strip()
+        .str.replace(r'\.0$', '', regex=True)
+    )
+  else:
+    df['farm_name'] = ''
+
+  # L열(11) ~ U열(20) 하자 여부 판별
   def check_no_defect(row_slice):
     for val in row_slice:
       if pd.notna(val):
@@ -73,9 +84,6 @@ if check_password():
   if 'main_menu' not in st.session_state:
     st.session_state.main_menu = '배정'
 
-  # ------------------------------------------------------------------------------
-  # 💡 세션 거래처 목록 동기화 (KeyError 방지 안전성 로직)
-  # ------------------------------------------------------------------------------
   df_cond = get_company_conditions_df()
   current_cond_companies = list(df_cond['거래처']) if not df_cond.empty else []
 
@@ -307,7 +315,7 @@ if check_password():
 
           # ---------------- 아코디언 메뉴 ----------------
 
-          # 1. 1차 배정 내역보기 (맨 위)
+          # 1. 1차 배정 내역보기
           with st.expander(
               '📋 1차 배정 내역보기(스팩 100% 일치)', expanded=False
           ):
@@ -353,7 +361,7 @@ if check_password():
                 mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             )
 
-          # 2. 1차 배정 미분류 내역 (중간)
+          # 2. 1차 배정 미분류 내역
           if not unallocated_df.empty:
             with st.expander(
                 '⚠️ 1차 배정 미분류 (잔여 물량) 내역 보기', expanded=False
@@ -374,7 +382,7 @@ if check_password():
                   mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
               )
 
-          # 3. 업체별 세부 배정 조건표 (맨 아래)
+          # 3. 업체별 세부 배정 조건표 (배제농가 포함)
           with st.expander(
               '📋 업체별 세부 배정 조건표 조회 및 엑셀 다운로드', expanded=False
           ):
