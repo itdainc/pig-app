@@ -3,35 +3,7 @@ import pandas as pd
 import io
 from datetime import datetime
 
-# ----------------- 엑셀 위치 지정 로더 (7행부터 데이터 시작, I=8, J=9, L~U=11~20, W=22) -----------------
-def load_excel_by_coords(file):
-    file.seek(0)
-    # 상단 6개 행을 건너뛰고 7번째 행(인덱스 6)부터 데이터만 판독
-    df = pd.read_excel(file, skiprows=6, header=None)
-    
-    # I열(8): 중량, J열(9): 등지방, W열(22): 최종등급 수치 및 문자 변환
-    df['w_num'] = pd.to_numeric(df.iloc[:, 8], errors='coerce')
-    df['f_num'] = pd.to_numeric(df.iloc[:, 9], errors='coerce')
-    # W열(22) 등급 텍스트 정제 (1.0 형태로 판독되는 경우 대비)
-    df['grade_str'] = df.iloc[:, 22].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
-    
-    # L열(11) ~ U열(20) 하자 여부 판별 (데이터가 존재하면 하자 있음 -> False)
-    def check_no_defect(row_slice):
-        for val in row_slice:
-            if pd.notna(val):
-                s = str(val).strip()
-                if s and s.lower() not in ['nan', 'none']:
-                    return False  # 데이터(텍스트/숫자)가 있으므로 하자 있음
-        return True  # 아무 데이터도 없으므로 하자 없음
-
-    df['no_defect'] = df.iloc[:, 11:21].apply(check_no_defect, axis=1)
-    
-    w_col_name = "I열(중량)"
-    f_col_name = "J열(등지방)"
-    
-    return df, w_col_name, f_col_name
-
-# ----------------- 외부 연동 모듈 불러오기 -----------------
+# ----------------- 외부 및 분리 모듈 불러오기 -----------------
 try:
     from auth import check_password
 except ImportError:
@@ -42,6 +14,36 @@ try:
 except ImportError:
     DEFAULT_TARGET_COUNTS = []
     def allocate_pigs_data(file, specs): return pd.DataFrame(), {}
+
+# 별도 분리된 1차 배정 모듈 불러오기
+try:
+    from first_allocator import run_first_allocation
+except ImportError:
+    run_first_allocation = None
+
+# ----------------- 엑셀 위치 지정 로더 (7행부터 데이터 시작, I=8, J=9, L~U=11~20, W=22) -----------------
+def load_excel_by_coords(file):
+    file.seek(0)
+    df = pd.read_excel(file, skiprows=6, header=None)
+    
+    df['w_num'] = pd.to_numeric(df.iloc[:, 8], errors='coerce')
+    df['f_num'] = pd.to_numeric(df.iloc[:, 9], errors='coerce')
+    df['grade_str'] = df.iloc[:, 22].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+    
+    def check_no_defect(row_slice):
+        for val in row_slice:
+            if pd.notna(val):
+                s = str(val).strip()
+                if s and s.lower() not in ['nan', 'none']:
+                    return False
+        return True
+
+    df['no_defect'] = df.iloc[:, 11:21].apply(check_no_defect, axis=1)
+    
+    w_col_name = "I열(중량)"
+    f_col_name = "J열(등지방)"
+    
+    return df, w_col_name, f_col_name
 
 # 로그인 검증
 if check_password():
@@ -104,18 +106,15 @@ if check_password():
             st.subheader("🚀 자동 배정 연산 및 분석")
             
             # -------------------------------------------------------------------------
-            # 1. 등급판정 결과 분석 표 (I, J, W, L~U열 기준 분석)
+            # 1. 등급판정 결과 분석 표
             # -------------------------------------------------------------------------
             st.markdown("### 📊 1. 등급판정 결과 데이터 규격 분석")
             
             if uploaded_grade:
                 try:
                     df_raw, w_col_name, f_col_name = load_excel_by_coords(uploaded_grade)
-                    
-                    # 결측치 제외 유효 데이터 추출
                     df_valid = df_raw.dropna(subset=['w_num', 'f_num'])
                     
-                    # 조건 1: 마장동 스펙 (중량 85~97kg AND 등지방 18~27mm AND 등급 1 or 1+ AND 하자없음)
                     cond1 = (
                         (df_valid['w_num'] >= 85) & (df_valid['w_num'] <= 97) & 
                         (df_valid['f_num'] >= 18) & (df_valid['f_num'] <= 27) & 
@@ -123,22 +122,14 @@ if check_password():
                         (df_valid['no_defect'])
                     )
                     df_cond1 = df_valid[cond1]
-                    
-                    # 조건 1 제외 물량
                     df_rem1 = df_valid[~cond1]
                     
-                    # 조건 2: 두꺼운 지육 (조건 1 제외 중 중량 >= 97kg OR 등지방 >= 27mm)
                     cond2 = (df_rem1['w_num'] >= 97) | (df_rem1['f_num'] >= 27)
                     df_cond2 = df_rem1[cond2]
-                    
-                    # 조건 1, 2 제외 물량
                     df_rem2 = df_rem1[~cond2]
                     
-                    # 조건 3: 얇은/소형 지육 (조건 1, 2 제외 중 중량 < 85kg OR 등지방 < 18mm)
                     cond3 = (df_rem2['w_num'] < 85) | (df_rem2['f_num'] < 18)
                     df_cond3 = df_rem2[cond3]
-                    
-                    # 조건 4: 그외 (1~3번 조건 모두 미포함 물량)
                     df_cond4 = df_rem2[~cond3]
                     
                     tot_cnt = len(df_valid)
@@ -179,85 +170,66 @@ if check_password():
             st.markdown("---")
 
             # -------------------------------------------------------------------------
-            # 2. 조건 일치 자동배정 예상 결과 표 & 실행
+            # 2. 1차 배정 (스펙일치) - 실행 버튼 제거 후 자동 연산 적용
             # -------------------------------------------------------------------------
-            st.markdown("### 🤖 2. 조건별 예상 배정 현황 및 연산 실행")
+            st.markdown("### 🤖 2. 1차 배정 (스펙일치)")
             
-            # 자동 배정 실행 버튼
-            if st.button("⚡ 거래처 자동 배정 실행하기", type="primary", use_container_width=True):
-                if uploaded_grade:
-                    try:
-                        uploaded_grade.seek(0)
-                        pigs, specs_dict = allocate_pigs_data(uploaded_grade, st.session_state.target_df)
+            if uploaded_grade:
+                try:
+                    # 분리된 first_allocator 모듈을 호출하여 자동 배정 수행
+                    if run_first_allocation:
+                        pigs, specs_dict, display_summary = run_first_allocation(
+                            uploaded_grade, st.session_state.target_df, allocate_pigs_data
+                        )
                         st.session_state['allocated_pigs'] = pigs
                         st.session_state['specs_dict'] = specs_dict
-                        st.success("✅ 자동 배정이 성공적으로 완료되었습니다!")
-                    except Exception as e:
-                        st.error(f"파일 처리 중 오류가 발생했습니다: {e}")
-                else:
-                    st.warning("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 먼저 업로드해 주세요.")
+                        
+                        if display_summary is not None and not display_summary.empty:
+                            calc_summary_height = (len(display_summary) + 1) * 35 + 10
+                            st.dataframe(display_summary, height=calc_summary_height, use_container_width=True, hide_index=True)
+                            
+                            c1, c2, c3 = st.columns(3)
+                            c1.metric("총 도축 수량", f"{len(pigs)} 두")
+                            c2.metric("일반 거래처 배정 수량", f"{len(pigs[~pigs['배정거래처'].str.contains('잇다', na=False)])} 두")
+                            c3.metric("잇다 잔여 할당 수량", f"{len(pigs[pigs['배정거래처'].str.contains('잇다', na=False)])} 두")
+                            
+                            st.markdown(" ")
+                            col_main, _ = st.columns([4, 1])
+                            with col_main:
+                                st.subheader("📋 전체 개체별 세부 배정 내역")
+                                today_str = datetime.now().strftime("%Y-%m-%d")
+                                
+                                summary = pigs.groupby(['배정거래처', '성별']).size().unstack(fill_value=0)
+                                if '거세' not in summary.columns: summary['거세'] = 0
+                                if '암' not in summary.columns: summary['암'] = 0
+                                summary['합계'] = summary['거세'] + summary['암']
+                                summary = summary[['합계', '거세', '암']]
 
-            # 연산 결과 요약 표 표시
-            if 'allocated_pigs' in st.session_state:
-                pigs = st.session_state['allocated_pigs']
-                
-                # 거래처별 예상 배정두수 요약표 생성
-                target_df_curr = st.session_state.target_df.copy()
-                allocated_counts = pigs.groupby('배정거래처').size().reset_index(name='예상 배정두수')
-                
-                summary_alloc = pd.merge(target_df_curr, allocated_counts, left_on='거래처명', right_on='배정거래처', how='left')
-                summary_alloc['예상 배정두수'] = summary_alloc['예상 배정두수'].fillna(0).astype(int)
-                summary_alloc['목표두수'] = pd.to_numeric(summary_alloc['목표두수'], errors='coerce').fillna(0).astype(int)
-                
-                # 달성률 계산
-                summary_alloc['달성률'] = summary_alloc.apply(
-                    lambda r: f"{(r['예상 배정두수']/r['목표두수']*100):.1f}%" if r['목표두수'] > 0 else "-", axis=1
-                )
-                
-                display_summary = summary_alloc[['거래처명', '목표두수', '예상 배정두수', '달성률']]
-                
-                # 표 전체 높이를 행 개수에 맞추어 스크롤이 생기지 않도록 지정
-                calc_summary_height = (len(display_summary) + 1) * 35 + 10
-                st.dataframe(display_summary, height=calc_summary_height, use_container_width=True, hide_index=True)
-                
-                c1, c2, c3 = st.columns(3)
-                c1.metric("총 도축 수량", f"{len(pigs)} 두")
-                c2.metric("일반 거래처 배정 수량", f"{len(pigs[~pigs['배정거래처'].str.contains('잇다', na=False)])} 두")
-                c3.metric("잇다 잔여 할당 수량", f"{len(pigs[pigs['배정거래처'].str.contains('잇다', na=False)])} 두")
-                
-                st.markdown(" ")
-                col_main, _ = st.columns([4, 1])
-                with col_main:
-                    st.subheader("📋 전체 개체별 세부 배정 내역")
-                    today_str = datetime.now().strftime("%Y-%m-%d")
-                    
-                    summary = pigs.groupby(['배정거래처', '성별']).size().unstack(fill_value=0)
-                    if '거세' not in summary.columns: summary['거세'] = 0
-                    if '암' not in summary.columns: summary['암'] = 0
-                    summary['합계'] = summary['거세'] + summary['암']
-                    summary = summary[['합계', '거세', '암']]
+                                output = io.BytesIO()
+                                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                                    pigs.to_excel(writer, sheet_name='전체배정내역')
+                                    summary.to_excel(writer, sheet_name='요약')
+                                processed_data = output.getvalue()
+                                
+                                st.download_button(
+                                    label="📥 전체 배정 결과 엑셀 다운로드",
+                                    data=processed_data,
+                                    file_name=f"{today_str}_배정결과.xlsx",
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                )
 
-                    output = io.BytesIO()
-                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                        pigs.to_excel(writer, sheet_name='전체배정내역')
-                        summary.to_excel(writer, sheet_name='요약')
-                    processed_data = output.getvalue()
-                    
-                    st.download_button(
-                        label="📥 전체 배정 결과 엑셀 다운로드",
-                        data=processed_data,
-                        file_name=f"{today_str}_배정결과.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-
-                    display_df = pigs[['도체번호', '성별', '중량', '등지방', '등급', '배정거래처', '이력번호', '출하농가']].copy()
-                    calc_height = (len(display_df) + 1) * 35 + 10
-                    st.dataframe(display_df, height=calc_height, use_container_width=True, column_config=get_centered_column_config(display_df))
+                                display_df = pigs[['도체번호', '성별', '중량', '등지방', '등급', '배정거래처', '이력번호', '출하농가']].copy()
+                                calc_height = (len(display_df) + 1) * 35 + 10
+                                st.dataframe(display_df, height=calc_height, use_container_width=True, column_config=get_centered_column_config(display_df))
+                except Exception as e:
+                    st.error(f"1차 배정 처리 중 오류가 발생했습니다: {e}")
+            else:
+                st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드하시면 1차 배정 결과가 자동 연산됩니다.")
 
             st.markdown("---")
 
             # -------------------------------------------------------------------------
-            # 3. 거래처별 목표두수 / 변동두수 수기 조정 (하단)
+            # 3. 거래처별 목표두수 / 변동두수 수기 조정
             # -------------------------------------------------------------------------
             st.markdown("### ✏️ 3. 거래처별 목표두수 / 변동두수 수기 조정")
             with st.expander("📌 거래처별 목표두수 수기 조정 표 (클릭하여 열기)", expanded=True):
@@ -275,7 +247,8 @@ if check_password():
                 )
                 if st.button("💾 두수 변동사항 적용", type="secondary", use_container_width=True):
                     st.session_state.target_df = edited_target_df
-                    st.success("✅ 목표두수가 업데이트되었습니다. 상단의 [⚡ 거래처 자동 배정 실행하기] 버튼을 누르세요!")
+                    st.success("✅ 목표두수가 업데이트되었습니다.")
+                    st.rerun()
 
         # ----------------- 탭 2: 거래처별 배정 상세 -----------------
         with tab2:
