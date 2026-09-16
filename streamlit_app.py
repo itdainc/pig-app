@@ -151,35 +151,7 @@ if check_password():
                     c2.metric("1차 배정 완료 수량", f"{len(pigs[pigs['배정거래처'] != '미분류'])} 두")
                     c3.metric("미분류 (잔여 물량)", f"{len(unallocated_df)} 두")
                     
-                    with st.expander("📋 업체별 세부 배정 조건표 조회 및 엑셀 다운로드"):
-                        cond_df = get_company_conditions_df()
-                        if not cond_df.empty:
-                            st.dataframe(cond_df, use_container_width=True, hide_index=True)
-                            st.download_button(
-                                label="📥 거래처별 배정 조건표 엑셀 다운로드",
-                                data=get_company_conditions_excel_bytes(),
-                                file_name="거래처별_배정조건표.xlsx",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                            )
-
-                    # 1차 배정 미분류 내역
-                    if not unallocated_df.empty:
-                        with st.expander("⚠️ 1차 배정 미분류 (잔여 물량) 내역 보기", expanded=False):
-                            today_str = datetime.now().strftime("%Y-%m-%d")
-                            output_unalloc = io.BytesIO()
-                            with pd.ExcelWriter(output_unalloc, engine='openpyxl') as writer:
-                                unallocated_df.to_excel(writer, sheet_name='1차_미분류내역', index=False)
-                            
-                            st.dataframe(unallocated_df, use_container_width=True)
-
-                            st.download_button(
-                                label="📥 1차 배정 미분류 엑셀 다운로드",
-                                data=output_unalloc.getvalue(),
-                                file_name=f"{today_str}_1차배정_미분류내역.xlsx",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                            )
-
-                    # 1차 배정 내역보기 문구 변경 적용
+                    # 1. 1차 배정 내역보기 (상단 배치)
                     with st.expander("📋 1차 배정 내역보기(스팩 100% 일치)", expanded=False):
                         today_str = datetime.now().strftime("%Y-%m-%d")
                         summary = pigs.groupby(['배정거래처']).size().reset_index(name='수량')
@@ -202,6 +174,35 @@ if check_password():
                             file_name=f"{today_str}_배정결과.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         )
+
+                    # 2. 1차 배정 미분류 내역 (중간 배치)
+                    if not unallocated_df.empty:
+                        with st.expander("⚠️ 1차 배정 미분류 (잔여 물량) 내역 보기", expanded=False):
+                            today_str = datetime.now().strftime("%Y-%m-%d")
+                            output_unalloc = io.BytesIO()
+                            with pd.ExcelWriter(output_unalloc, engine='openpyxl') as writer:
+                                unallocated_df.to_excel(writer, sheet_name='1차_미분류내역', index=False)
+                            
+                            st.dataframe(unallocated_df, use_container_width=True)
+
+                            st.download_button(
+                                label="📥 1차 배정 미분류 엑셀 다운로드",
+                                data=output_unalloc.getvalue(),
+                                file_name=f"{today_str}_1차배정_미분류내역.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
+
+                    # 3. 업체별 세부 배정 조건표 (하단 배치)
+                    with st.expander("📋 업체별 세부 배정 조건표 조회 및 엑셀 다운로드", expanded=False):
+                        cond_df = get_company_conditions_df()
+                        if not cond_df.empty:
+                            st.dataframe(cond_df, use_container_width=True, hide_index=True)
+                            st.download_button(
+                                label="📥 거래처별 배정 조건표 엑셀 다운로드",
+                                data=get_company_conditions_excel_bytes(),
+                                file_name="거래처별_배정조건표.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
 
                 except Exception as e:
                     st.error(f"1차 배정 처리 중 오류가 발생했습니다: {e}")
