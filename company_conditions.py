@@ -202,7 +202,7 @@ INITIAL_COMPANY_CONDITIONS = [
 
 
 def get_company_conditions_df(conditions_list=None):
-  """화면 출력 및 조건표 생성 함수"""
+  """화면 출력 및 조건표 생성 함수 (컬럼명 명확화)"""
   target_list = (
       conditions_list if conditions_list is not None else INITIAL_COMPANY_CONDITIONS
   )
@@ -216,10 +216,10 @@ def get_company_conditions_df(conditions_list=None):
         "목표두수": item["target_cnt"],
         "암 비율": item["female_ratio"],
         "지급률": item["payment_rate"],
-        "최소중량": item["weight_min"],
-        "최대중량": item["weight_max"],
-        "최소등지방": item["fat_min"],    # 분리된 최소등지방 반영
-        "최대등지방": item["fat_max"],    # 분리된 최대등지방 반영
+        "최소 중량(kg)": item["weight_min"],  # 명확한 컬럼명 및 단위 지정
+        "최대 중량(kg)": item["weight_max"],
+        "최소 등지방(mm)": item["fat_min"],  # 명확한 컬럼명 및 단위 지정
+        "최대 등지방(mm)": item["fat_max"],
         "등급": item["grade_str"],
         "하자": item["defect_str"],
     })
