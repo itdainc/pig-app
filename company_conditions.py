@@ -3,7 +3,7 @@ import pandas as pd
 
 # ==============================================================================
 # 업체별 세부 배정 조건 초기 변수 데이터 구조화
-# (중량 변수를 최소중량, 최대중량 2개로 분리)
+# (중량 및 등지방 변수를 각각 최소/최대로 완벽히 분리)
 # ==============================================================================
 INITIAL_COMPANY_CONDITIONS = [
     {
@@ -15,7 +15,6 @@ INITIAL_COMPANY_CONDITIONS = [
         "payment_rate": "105.0%",
         "weight_min": 98,
         "weight_max": 109,
-        "fat_str": "20~27",
         "fat_min": 20,
         "fat_max": 27,
         "grade_str": "2",
@@ -32,7 +31,6 @@ INITIAL_COMPANY_CONDITIONS = [
         "payment_rate": "103.5%",
         "weight_min": 83,
         "weight_max": 88,
-        "fat_str": "18~22",
         "fat_min": 18,
         "fat_max": 22,
         "grade_str": "1,1+,2",
@@ -49,7 +47,6 @@ INITIAL_COMPANY_CONDITIONS = [
         "payment_rate": "104.5%",
         "weight_min": 80,
         "weight_max": 103,
-        "fat_str": "20~34",
         "fat_min": 20,
         "fat_max": 34,
         "grade_str": "1,1+,2",
@@ -66,7 +63,6 @@ INITIAL_COMPANY_CONDITIONS = [
         "payment_rate": "105.0%",
         "weight_min": 85,
         "weight_max": 90,
-        "fat_str": "26~29",
         "fat_min": 26,
         "fat_max": 29,
         "grade_str": "1,1+",
@@ -83,7 +79,6 @@ INITIAL_COMPANY_CONDITIONS = [
         "payment_rate": "107.0%",
         "weight_min": 85,
         "weight_max": 97,
-        "fat_str": "21~25",
         "fat_min": 21,
         "fat_max": 25,
         "grade_str": "1,1+",
@@ -100,7 +95,6 @@ INITIAL_COMPANY_CONDITIONS = [
         "payment_rate": "107.0%",
         "weight_min": 88,
         "weight_max": 97,
-        "fat_str": "25~27",
         "fat_min": 25,
         "fat_max": 27,
         "grade_str": "1,1+",
@@ -117,7 +111,6 @@ INITIAL_COMPANY_CONDITIONS = [
         "payment_rate": "107.5%",
         "weight_min": 85,
         "weight_max": 95,
-        "fat_str": "22~25",
         "fat_min": 22,
         "fat_max": 25,
         "grade_str": "1,1+",
@@ -134,7 +127,6 @@ INITIAL_COMPANY_CONDITIONS = [
         "payment_rate": "107.5%",
         "weight_min": 84,
         "weight_max": 88,
-        "fat_str": "20",
         "fat_min": 20,
         "fat_max": 20,
         "grade_str": "1,1+",
@@ -151,7 +143,6 @@ INITIAL_COMPANY_CONDITIONS = [
         "payment_rate": "107.0%",
         "weight_min": 85,
         "weight_max": 90,
-        "fat_str": "18~21",
         "fat_min": 18,
         "fat_max": 21,
         "grade_str": "1,1+",
@@ -168,7 +159,6 @@ INITIAL_COMPANY_CONDITIONS = [
         "payment_rate": "107.0%",
         "weight_min": 85,
         "weight_max": 90,
-        "fat_str": "18~21",
         "fat_min": 18,
         "fat_max": 21,
         "grade_str": "1,1+",
@@ -185,7 +175,6 @@ INITIAL_COMPANY_CONDITIONS = [
         "payment_rate": "107.0%",
         "weight_min": 87,
         "weight_max": 97,
-        "fat_str": "20~22",
         "fat_min": 20,
         "fat_max": 22,
         "grade_str": "1,1+",
@@ -202,7 +191,6 @@ INITIAL_COMPANY_CONDITIONS = [
         "payment_rate": "105.0%",
         "weight_min": 85,
         "weight_max": 97,
-        "fat_str": "17~27",
         "fat_min": 17,
         "fat_max": 27,
         "grade_str": "1,1+",
@@ -228,9 +216,10 @@ def get_company_conditions_df(conditions_list=None):
         "목표두수": item["target_cnt"],
         "암 비율": item["female_ratio"],
         "지급률": item["payment_rate"],
-        "최소중량": item["weight_min"],    # 분리된 최소중량 반영
-        "최대중량": item["weight_max"],    # 분리된 최대중량 반영
-        "등지방(mm)": item["fat_str"],
+        "최소중량": item["weight_min"],
+        "최대중량": item["weight_max"],
+        "최소등지방": item["fat_min"],    # 분리된 최소등지방 반영
+        "최대등지방": item["fat_max"],    # 분리된 최대등지방 반영
         "등급": item["grade_str"],
         "하자": item["defect_str"],
     })
