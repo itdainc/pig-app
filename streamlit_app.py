@@ -231,8 +231,8 @@ if check_password():
                             summary.to_excel(writer, sheet_name='요약')
                         processed_data = output.getvalue()
                         
-                        display_df = pigs[[8, 9, 22, 'w_num', 'f_num', 'grade_str', '배정거래처']].copy()
-                        display_df.columns = ['도체번호', '중량(원본)', '등지방(원본)', '중량(숫자)', '등지방(숫자)', '등급', '배정거래처']
+                        display_df = pigs[[1, 'w_num', 'f_num', 'grade_str', '배정거래처']].copy()
+                        display_df.columns = ['도체번호', '중량', '등지방', '등급', '배정거래처']
                         calc_height = (len(display_df) + 1) * 35 + 10
                         
                         st.dataframe(display_df, height=calc_height, use_container_width=True)
@@ -251,8 +251,8 @@ if check_password():
                             with pd.ExcelWriter(output_unalloc, engine='openpyxl') as writer:
                                 unallocated_df.to_excel(writer, sheet_name='1차_미분류내역', index=False)
                             
-                            display_unalloc_df = unallocated_df[[8, 9, 22, 'w_num', 'f_num', 'grade_str', '배정거래처']].copy()
-                            display_unalloc_df.columns = ['도체번호', '중량(원본)', '등지방(원본)', '중량(숫자)', '등지방(숫자)', '등급', '배정거래처']
+                            display_unalloc_df = unallocated_df[[1, 'w_num', 'f_num', 'grade_str', '배정거래처']].copy()
+                            display_unalloc_df.columns = ['도체번호', '중량', '등지방', '등급', '배정거래처']
                             calc_unalloc_height = (len(display_unalloc_df) + 1) * 35 + 10
                             
                             st.dataframe(display_unalloc_df, height=calc_unalloc_height, use_container_width=True)
@@ -292,9 +292,8 @@ if check_password():
                     st.markdown(f"### **[{selected_company}] 배정 명단**")
                     comp_df = pigs_all[pigs_all['배정거래처'] == selected_company].copy()
                     
-                    # 💡 거래처별 명단표 컬럼 정제 및 가독성 개선
-                    display_comp_df = comp_df[[8, 9, 22, 'w_num', 'f_num', 'grade_str', '배정거래처']].copy()
-                    display_comp_df.columns = ['도체번호', '중량(원본)', '등지방(원본)', '중량(숫자)', '등지방(숫자)', '등급', '배정거래처']
+                    display_comp_df = comp_df[[1, 'w_num', 'f_num', 'grade_str', '배정거래처']].copy()
+                    display_comp_df.columns = ['도체번호', '중량', '등지방', '등급', '배정거래처']
                     calc_comp_height = (len(display_comp_df) + 1) * 35 + 10
                     
                     st.dataframe(display_comp_df, height=calc_comp_height, use_container_width=True)
@@ -309,8 +308,8 @@ if check_password():
                 unassigned_df_tab3 = pigs_all[pigs_all['배정거래처'] == '미분류'].copy()
                 
                 if not unassigned_df_tab3.empty:
-                    display_tab3_df = unassigned_df_tab3[[8, 9, 22, 'w_num', 'f_num', 'grade_str', '배정거래처']].copy()
-                    display_tab3_df.columns = ['도체번호', '중량(원본)', '등지방(원본)', '중량(숫자)', '등지방(숫자)', '등급', '배정거래처']
+                    display_tab3_df = unassigned_df_tab3[[1, 'w_num', 'f_num', 'grade_str', '배정거래처']].copy()
+                    display_tab3_df.columns = ['도체번호', '중량', '등지방', '등급', '배정거래처']
                     calc_tab3_height = (len(display_tab3_df) + 1) * 35 + 10
                     st.dataframe(display_tab3_df, height=calc_tab3_height, use_container_width=True)
             else:
