@@ -215,7 +215,10 @@ if check_password():
                 )
                 
                 display_summary = summary_alloc[['거래처명', '목표두수', '예상 배정두수', '달성률']]
-                st.dataframe(display_summary, use_container_width=True, hide_index=True)
+                
+                # 표 전체 높이를 행 개수에 맞추어 스크롤이 생기지 않도록 지정
+                calc_summary_height = (len(display_summary) + 1) * 35 + 10
+                st.dataframe(display_summary, height=calc_summary_height, use_container_width=True, hide_index=True)
                 
                 c1, c2, c3 = st.columns(3)
                 c1.metric("총 도축 수량", f"{len(pigs)} 두")
