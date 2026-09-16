@@ -90,7 +90,6 @@ if check_password():
                     df_raw = load_excel_by_coords(uploaded_grade)
                     df_valid = df_raw.dropna(subset=['w_num', 'f_num'])
                     
-                    # 💡 백그라운드 연산 시 summary_df(요약표 데이터)를 함께 받아옵니다.
                     pigs, unallocated_df, summary_df = run_100pct_strict_allocation(df_valid)
                     st.session_state['allocated_pigs'] = pigs
                     
@@ -152,15 +151,23 @@ if check_password():
                     c2.metric("1차 배정 완료 수량", f"{len(pigs[pigs['배정거래처'] != '미분류'])} 두")
                     c3.metric("미분류 (잔여 물량)", f"{len(unallocated_df)} 두")
                     
-                    # 💡 새로 추가된 [업체별 1차 배정 달성 요약] 표
+                    # 💡 수정된 [업체별 1차 배정 달성 요약] 표 (배정순서 제거, 부족두수 추가, 전체출력)
                     st.markdown("#### 📊 업체별 1차 배정 달성 요약")
                     if not summary_df.empty:
-                        # 미분류 행을 제외하고 화면에 출력
-                        comp_summary = summary_df[summary_df['거래처명'] != '미분류 (잔여 물량)']
-                        display_summary = comp_summary[['배정순서', '거래처명', '목표두수', '1차 배정두수', '달성률']]
-                        st.dataframe(display_summary, use_container_width=True, hide_index=True)
+                        comp_summary = summary_df[summary_df['거래처명'] != '미분류 (잔여 물량)'].copy()
+                        
+                        # 숫자 형변환 및 부족두수 계산
+                        comp_summary['목표두수'] = pd.to_numeric(comp_summary['목표두수'], errors='coerce').fillna(0).astype(int)
+                        comp_summary['1차 배정두수'] = pd.to_numeric(comp_summary['1차 배정두수'], errors='coerce').fillna(0).astype(int)
+                        comp_summary['부족두수'] = comp_summary['목표두수'] - comp_summary['1차 배정두수']
+                        
+                        display_summary = comp_summary[['거래처명', '목표두수', '1차 배정두수', '부족두수']]
+                        
+                        # 스크롤이 생기지 않도록 모든 행 높이에 맞게 설정
+                        calc_summary_height = (len(display_summary) + 1) * 35 + 10
+                        st.dataframe(display_summary, height=calc_summary_height, use_container_width=True, hide_index=True)
 
-                    # 1. 1차 배정 내역보기 (상단 배치)
+                    # 1. 1차 배정 내역보기
                     with st.expander("📋 1차 배정 내역보기(스팩 100% 일치)", expanded=False):
                         today_str = datetime.now().strftime("%Y-%m-%d")
                         summary = pigs.groupby(['배정거래처']).size().reset_index(name='수량')
@@ -184,7 +191,7 @@ if check_password():
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         )
 
-                    # 2. 1차 배정 미분류 내역 (중간 배치)
+                    # 2. 1차 배정 미분류 내역
                     if not unallocated_df.empty:
                         with st.expander("⚠️ 1차 배정 미분류 (잔여 물량) 내역 보기", expanded=False):
                             today_str = datetime.now().strftime("%Y-%m-%d")
@@ -201,7 +208,7 @@ if check_password():
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                             )
 
-                    # 3. 업체별 세부 배정 조건표 (하단 배치)
+                    # 3. 업체별 세부 배정 조건표
                     with st.expander("📋 업체별 세부 배정 조건표 조회 및 엑셀 다운로드", expanded=False):
                         cond_df = get_company_conditions_df()
                         if not cond_df.empty:
