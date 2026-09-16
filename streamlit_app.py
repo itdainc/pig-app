@@ -71,34 +71,83 @@ if check_password():
             "🚚 잇다 배정"
         ])
 
-        # ----------------- 탭 1: 자동 배정 실행 (높이가 넓어진 접이식 수량 창) -----------------
+        # ----------------- 탭 1: 자동 배정 실행 -----------------
         with tab1:
-            st.subheader("🚀 자동 배정 연산 실행")
+            st.subheader("🚀 자동 배정 연산 및 분석")
             
-            # 수량 조절용 접이식 모달 창 (height를 650px로 시원하게 확대)
-            with st.expander("✏️ 거래처별 목표두수 / 변동두수 수기 조정 (클릭하여 열기)", expanded=False):
-                st.info("💡 목표 두수에 변동이 있으면 아래 표에서 수량을 직접 수정하거나 새로운 거래처를 추가하세요.")
-                edited_target_df = st.data_editor(
-                    st.session_state.target_df,
-                    num_rows="dynamic",
-                    use_container_width=True,
-                    height=650,  # <-- 클릭 시 한눈에 보기 편하게 높이 대폭 확대!
-                    key="target_editor",
-                    column_config={
-                        "거래처명": st.column_config.Column("거래처명", alignment="center"), 
-                        "목표두수": st.column_config.Column("목표두수", alignment="center")
-                    }
-                )
-                if st.button("💾 두수 변동사항 적용", type="secondary", use_container_width=True):
-                    st.session_state.target_df = edited_target_df
-                    st.success("✅ 목표두수가 업데이트되었습니다. 아래 배정 실행 버튼을 누르세요!")
+            # -------------------------------------------------------------------------
+            # 1. 등급판정 결과 분석 표 (최상단)
+            # -------------------------------------------------------------------------
+            st.markdown("### 📊 1. 등급판정 결과 데이터 규격 분석")
+            
+            if uploaded_grade:
+                try:
+                    # 엑셀 파일 읽기 (임시 분석용)
+                    uploaded_grade.seek(0)
+                    df_raw = pd.read_excel(uploaded_grade)
+                    
+                    w_col = next((c for c in df_raw.columns if '중량' in c or '도체중' in c or '체중' in c), None)
+                    f_col = next((c for c in df_raw.columns if '등지방' in c or '지방' in c), None)
+                    
+                    if w_col and f_col:
+                        df_raw['w_num'] = pd.to_numeric(df_raw[w_col], errors='coerce')
+                        df_raw['f_num'] = pd.to_numeric(df_raw[f_col], errors='coerce')
+                        
+                        # 조건 1: 마장동 스펙 (중량 85~97kg AND 등지방 18~27mm)
+                        cond1 = (df_raw['w_num'] >= 85) & (df_raw['w_num'] <= 97) & (df_raw['f_num'] >= 18) & (df_raw['f_num'] <= 27)
+                        df_cond1 = df_raw[cond1]
+                        
+                        # 조건 1 제외 물량
+                        df_rem1 = df_raw[~cond1]
+                        
+                        # 조건 2: 두꺼운 지육 (조건 1 제외 중 중량 >= 97kg OR 등지방 >= 27mm)
+                        cond2 = (df_rem1['w_num'] >= 97) | (df_rem1['f_num'] >= 27)
+                        df_cond2 = df_rem1[cond2]
+                        
+                        # 조건 3: 얇은/소형 지육 (조건 1, 2 제외 잔여: 중량 < 85kg OR 등지방 < 18mm)
+                        df_cond3 = df_rem1[~cond2]
+                        
+                        tot_cnt = len(df_raw)
+                        c1_cnt = len(df_cond1)
+                        c2_cnt = len(df_cond2)
+                        c3_cnt = len(df_cond3)
+                        
+                        analysis_table = pd.DataFrame({
+                            "구분": ["1. 마장동 스펙 규격", "2. 두꺼운 지육 (마장동 제외)", "3. 얇은/소형 지육 (잔여 물량)"],
+                            "분류 상세 조건": [
+                                "중량 85kg ~ 97kg  AND  등지방 18mm ~ 27mm",
+                                "중량 97kg 이상  OR  등지방 27mm 이상",
+                                "중량 85kg 미만  OR  등지방 18mm 미만"
+                            ],
+                            "배정가능 두수": [f"{c1_cnt:,} 두", f"{c2_cnt:,} 두", f"{c3_cnt:,} 두"],
+                            "비율 (%)": [
+                                f"{(c1_cnt/tot_cnt*100):.1f}%" if tot_cnt > 0 else "0%",
+                                f"{(c2_cnt/tot_cnt*100):.1f}%" if tot_cnt > 0 else "0%",
+                                f"{(c3_cnt/tot_cnt*100):.1f}%" if tot_cnt > 0 else "0%"
+                            ]
+                        })
+                        
+                        st.table(analysis_table)
+                        st.info(f"💡 **총 입고두수:** {tot_cnt:,}두 (마장동 스펙: {c1_cnt:,}두 / 두꺼운 지육: {c2_cnt:,}두 / 얇은·소형: {c3_cnt:,}두)")
+                    else:
+                        st.warning("⚠️ 엑셀 파일에서 '중량' 및 '등지방' 컬럼을 감지하지 못했습니다.")
+                except Exception as e:
+                    st.error(f"등급판정 파일 분석 중 오류 발생: {e}")
+            else:
+                st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드하시면 규격별 수량 분석표가 표시됩니다.")
 
-            st.markdown(" ")
+            st.markdown("---")
+
+            # -------------------------------------------------------------------------
+            # 2. 조건 일치 자동배정 예상 결과 표 & 실행
+            # -------------------------------------------------------------------------
+            st.markdown("### 🤖 2. 조건별 예상 배정 현황 및 연산 실행")
             
             # 자동 배정 실행 버튼
             if st.button("⚡ 거래처 자동 배정 실행하기", type="primary", use_container_width=True):
                 if uploaded_grade:
                     try:
+                        uploaded_grade.seek(0)
                         pigs, specs_dict = allocate_pigs_data(uploaded_grade, st.session_state.target_df)
                         st.session_state['allocated_pigs'] = pigs
                         st.session_state['specs_dict'] = specs_dict
@@ -108,18 +157,32 @@ if check_password():
                 else:
                     st.warning("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 먼저 업로드해 주세요.")
 
-            st.markdown("---")
-
-            # 배정 결과 표시
+            # 연산 결과 요약 표 표시
             if 'allocated_pigs' in st.session_state:
                 pigs = st.session_state['allocated_pigs']
-
+                
+                # 거래처별 예상 배정두수 요약표 생성
+                target_df_curr = st.session_state.target_df.copy()
+                allocated_counts = pigs.groupby('배정거래처').size().reset_index(name='예상 배정두수')
+                
+                summary_alloc = pd.merge(target_df_curr, allocated_counts, left_on='거래처명', right_on='배정거래처', how='left')
+                summary_alloc['예상 배정두수'] = summary_alloc['예상 배정두수'].fillna(0).astype(int)
+                summary_alloc['목표두수'] = pd.to_numeric(summary_alloc['목표두수'], errors='coerce').fillna(0).astype(int)
+                
+                # 달성률 계산
+                summary_alloc['달성률'] = summary_alloc.apply(
+                    lambda r: f"{(r['예상 배정두수']/r['목표두수']*100):.1f}%" if r['목표두수'] > 0 else "-", axis=1
+                )
+                
+                display_summary = summary_alloc[['거래처명', '목표두수', '예상 배정두수', '달성률']]
+                st.dataframe(display_summary, use_container_width=True, hide_index=True)
+                
                 c1, c2, c3 = st.columns(3)
                 c1.metric("총 도축 수량", f"{len(pigs)} 두")
                 c2.metric("일반 거래처 배정 수량", f"{len(pigs[~pigs['배정거래처'].str.contains('잇다', na=False)])} 두")
                 c3.metric("잇다 잔여 할당 수량", f"{len(pigs[pigs['배정거래처'].str.contains('잇다', na=False)])} 두")
-
-                st.markdown("---")
+                
+                st.markdown(" ")
                 col_main, _ = st.columns([4, 1])
                 with col_main:
                     st.subheader("📋 전체 개체별 세부 배정 내역")
@@ -147,6 +210,29 @@ if check_password():
                     display_df = pigs[['도체번호', '성별', '중량', '등지방', '등급', '배정거래처', '이력번호', '출하농가']].copy()
                     calc_height = (len(display_df) + 1) * 35 + 10
                     st.dataframe(display_df, height=calc_height, use_container_width=True, column_config=get_centered_column_config(display_df))
+
+            st.markdown("---")
+
+            # -------------------------------------------------------------------------
+            # 3. 거래처별 목표두수 / 변동두수 수기 조정 (하단)
+            # -------------------------------------------------------------------------
+            st.markdown("### ✏️ 3. 거래처별 목표두수 / 변동두수 수기 조정")
+            with st.expander("📌 거래처별 목표두수 수기 조정 표 (클릭하여 열기)", expanded=True):
+                st.info("💡 목표 두수에 변동이 있으면 아래 표에서 수량을 직접 수정하거나 새로운 거래처를 추가하세요.")
+                edited_target_df = st.data_editor(
+                    st.session_state.target_df,
+                    num_rows="dynamic",
+                    use_container_width=True,
+                    height=500,
+                    key="target_editor",
+                    column_config={
+                        "거래처명": st.column_config.Column("거래처명", alignment="center"), 
+                        "목표두수": st.column_config.Column("목표두수", alignment="center")
+                    }
+                )
+                if st.button("💾 두수 변동사항 적용", type="secondary", use_container_width=True):
+                    st.session_state.target_df = edited_target_df
+                    st.success("✅ 목표두수가 업데이트되었습니다. 상단의 [⚡ 거래처 자동 배정 실행하기] 버튼을 누르세요!")
 
         # ----------------- 탭 2: 거래처별 배정 상세 -----------------
         with tab2:
@@ -341,7 +427,7 @@ if check_password():
             with pd.ExcelWriter(output_anal, engine='openpyxl') as writer: final_analysis_df.to_excel(writer, sheet_name='농가분석', index=False)
             
             st.download_button(label="📥 농가분석 결과 엑셀 다운로드", data=output_anal.getvalue(), file_name=f"농가분석_{datetime.now().strftime('%Y%m%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            styled_df = final_analysis_df.style.apply(lambda row: ['font-weight: bold; background-color: #f1f3f5;'] * len(row) if row['농가'] == '합계' else [''] * row, axis=1)
+            styled_df = final_analysis_df.style.apply(lambda row: ['font-weight: bold; background-color: #f1f3f5;'] * len(row) if row['농가'] == '합계' else [''] * len(row), axis=1)
             
             calc_height = (len(final_analysis_df) + 1) * 35 + 10
             st.dataframe(styled_df, height=calc_height, use_container_width=True, hide_index=True, column_config=get_centered_column_config(final_analysis_df))
