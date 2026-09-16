@@ -104,7 +104,7 @@ if check_password():
                     # 결측치 제외 유효 데이터 추출
                     df_valid = df_raw.dropna(subset=['w_num', 'f_num'])
                     
-                    # 조건 1: 마장동 스펙 (중량 85~97kg AND 등지방 18~27mm AND W열 등급 1 or 1+등급)
+                    # 조건 1: 마장동 스펙 (중량 85~97kg AND 등지방 18~27mm AND 등급 1 or 1+등급)
                     cond1 = (
                         (df_valid['w_num'] >= 85) & (df_valid['w_num'] <= 97) & 
                         (df_valid['f_num'] >= 18) & (df_valid['f_num'] <= 27) & 
@@ -130,9 +130,9 @@ if check_password():
                     analysis_table = pd.DataFrame({
                         "구분": ["1. 마장동 스펙 규격", "2. 두꺼운 지육 (마장동 제외)", "3. 얇은/소형 지육 (잔여 물량)"],
                         "분류 상세 조건": [
-                            r"중량 85 \~ 97kg  AND  등지방 18 \~ 27mm  AND  등급 1 / 1+ (W열)",
-                            r"중량 97kg 이상  OR  등지방 27mm 이상",
-                            r"중량 85kg 미만  OR  등지방 18mm 미만"
+                            r"중량 85 \~ 97kg, 등지방 18 \~ 27mm, 등급 1 / 1+",
+                            r"중량 97kg 이상 이거나 등지방 27mm 이상",
+                            r"중량 85kg 미만 이거나 등지방 18mm 미만"
                         ],
                         "배정가능 두수": [f"{c1_cnt:,} 두", f"{c2_cnt:,} 두", f"{c3_cnt:,} 두"],
                         "비율 (%)": [
