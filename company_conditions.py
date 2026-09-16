@@ -1,7 +1,7 @@
 import io
 import pandas as pd
 
-# 이미지(조건표) 기준 1차 배정 조건 데이터 (배정순서 1~12 정렬)
+# 이미지 표 기준 1차 배정 조건 데이터 (표에 표시된 행 순서 그대로 유지)
 COMPANY_CONDITIONS_DATA = [
     {
         "배정순서": 1,
@@ -19,24 +19,6 @@ COMPANY_CONDITIONS_DATA = [
         "f_min": 20,
         "f_max": 27,
         "grades": ["2"],
-        "no_defect_only": False,
-    },
-    {
-        "배정순서": 2,
-        "거래처": "흥부축산",
-        "중요도": 5,
-        "목표두수": 25,
-        "암 비율": "",
-        "지급률": "103.5%",
-        "중량(kg)": "83~88",
-        "등지방(mm)": "18~22",
-        "등급": "1,1+,2",
-        "하자": "",
-        "w_min": 83,
-        "w_max": 88,
-        "f_min": 18,
-        "f_max": 22,
-        "grades": ["1", "1+", "2"],
         "no_defect_only": False,
     },
     {
@@ -58,58 +40,22 @@ COMPANY_CONDITIONS_DATA = [
         "no_defect_only": False,
     },
     {
-        "배정순서": 4,
-        "거래처": "돼랑이",
-        "중요도": 4,
-        "목표두수": 5,
-        "암 비율": "50.00%",
-        "지급률": "105.0%",
-        "중량(kg)": "85~90",
-        "등지방(mm)": "26~29",
-        "등급": "1,1+",
+        "배정순서": 2,
+        "거래처": "흥부축산",
+        "중요도": 5,
+        "목표두수": 25,
+        "암 비율": "",
+        "지급률": "103.5%",
+        "중량(kg)": "83~88",
+        "등지방(mm)": "18~22",
+        "등급": "1,1+,2",
         "하자": "",
-        "w_min": 85,
-        "w_max": 90,
-        "f_min": 26,
-        "f_max": 29,
-        "grades": ["1", "1+"],
+        "w_min": 83,
+        "w_max": 88,
+        "f_min": 18,
+        "f_max": 22,
+        "grades": ["1", "1+", "2"],
         "no_defect_only": False,
-    },
-    {
-        "배정순서": 5,
-        "거래처": "민강",
-        "중요도": 1,
-        "목표두수": 60,
-        "암 비율": "100.00%",
-        "지급률": "107.0%",
-        "중량(kg)": "85~97",
-        "등지방(mm)": "21~25",
-        "등급": "1,1+",
-        "하자": "하자 없음",
-        "w_min": 85,
-        "w_max": 97,
-        "f_min": 21,
-        "f_max": 25,
-        "grades": ["1", "1+"],
-        "no_defect_only": True,
-    },
-    {
-        "배정순서": 6,
-        "거래처": "제이이",
-        "중요도": 2,
-        "목표두수": 15,
-        "암 비율": "100.00%",
-        "지급률": "107.0%",
-        "중량(kg)": "88~97",
-        "등지방(mm)": "25~27",
-        "등급": "1,1+",
-        "하자": "하자 없음",
-        "w_min": 88,
-        "w_max": 97,
-        "f_min": 25,
-        "f_max": 27,
-        "grades": ["1", "1+"],
-        "no_defect_only": True,
     },
     {
         "배정순서": 7,
@@ -144,6 +90,60 @@ COMPANY_CONDITIONS_DATA = [
         "w_max": 88,
         "f_min": 20,
         "f_max": 20,
+        "grades": ["1", "1+"],
+        "no_defect_only": True,
+    },
+    {
+        "배정순서": 6,
+        "거래처": "제이이",
+        "중요도": 2,
+        "목표두수": 15,
+        "암 비율": "100.00%",
+        "지급률": "107.0%",
+        "중량(kg)": "88~97",
+        "등지방(mm)": "25~27",
+        "등급": "1,1+",
+        "하자": "하자 없음",
+        "w_min": 88,
+        "w_max": 97,
+        "f_min": 25,
+        "f_max": 27,
+        "grades": ["1", "1+"],
+        "no_defect_only": True,
+    },
+    {
+        "배정순서": 4,
+        "거래처": "돼랑이",
+        "중요도": 4,
+        "목표두수": 5,
+        "암 비율": "50.00%",
+        "지급률": "105.0%",
+        "중량(kg)": "85~90",
+        "등지방(mm)": "26~29",
+        "등급": "1,1+",
+        "하자": "",
+        "w_min": 85,
+        "w_max": 90,
+        "f_min": 26,
+        "f_max": 29,
+        "grades": ["1", "1+"],
+        "no_defect_only": False,
+    },
+    {
+        "배정순서": 5,
+        "거래처": "민강",
+        "중요도": 1,
+        "목표두수": 60,
+        "암 비율": "100.00%",
+        "지급률": "107.0%",
+        "중량(kg)": "85~97",
+        "등지방(mm)": "21~25",
+        "등급": "1,1+",
+        "하자": "하자 없음",
+        "w_min": 85,
+        "w_max": 97,
+        "f_min": 21,
+        "f_max": 25,
         "grades": ["1", "1+"],
         "no_defect_only": True,
     },
@@ -223,7 +223,7 @@ COMPANY_CONDITIONS_DATA = [
 
 
 def get_company_conditions_df():
-  """화면 출력 및 엑셀 다운로드용 데이터프레임 반환"""
+  """이미지 표 순서 그대로 데이터프레임 생성하여 반환"""
   df = pd.DataFrame(COMPANY_CONDITIONS_DATA)
   cols = [
       "배정순서",
@@ -241,7 +241,7 @@ def get_company_conditions_df():
 
 
 def get_company_conditions_excel_bytes():
-  """배정 조건표 엑셀 바이트 반환"""
+  """배정 조건표 엑셀 바이트 파일 생성"""
   df = get_company_conditions_df()
   output = io.BytesIO()
   with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -250,25 +250,28 @@ def get_company_conditions_excel_bytes():
 
 
 def run_100pct_strict_allocation(df_valid):
-  """100% 조건 일치 1차 배정 연산 로직 (배정순서 1~12 순차 처리 + 미분류 추출)
+  """1차 배정: 스펙(중량, 등지방, 등급, 하자) 100% 일치 시에만 배정하는 로직
 
-  :param df_valid: 엑셀에서 읽어온 유효 데이터프레임 (w_num, f_num, grade_str, no_defect
-  컬럼 포함)
-  :return: (allocated_df, unallocated_df, summary_df)
+  - 배정순서(1~12) 순으로 차례대로 처리
+  - 목표두수를 채우지 못하더라도 조건 일치 건만 배정
+  - 남아있는 물량은 모두 '미분류'로 반환
   """
   pigs = df_valid.copy()
-  pigs["배정거래처"] = "미분류"  # 초기 상태: 전체 미분류
+  pigs["배정거래처"] = "미분류"
 
   summary_rows = []
 
-  # 배정순서(1~12)대로 순차 진행
-  for spec in sorted(COMPANY_CONDITIONS_DATA, key=lambda x: x["배정순서"]):
+  # 배정순서(1 -> 2 -> 3 ... -> 12) 숫자 순으로 정렬 후 순차 배정
+  sorted_specs = sorted(COMPANY_CONDITIONS_DATA, key=lambda x: x["배정순서"])
+
+  for spec in sorted_specs:
     comp_name = spec["거래처"]
     target_cnt = spec["목표두수"]
 
-    # 아직 배정되지 않은 지육('미분류') 중 조건 100% 일치 건 검색
+    # 아직 배정되지 않은 미분류 개체 필터링
     unassigned_mask = pigs["배정거래처"] == "미분류"
 
+    # 100% 조건 판별
     cond_weight = (pigs["w_num"] >= spec["w_min"]) & (
         pigs["w_num"] <= spec["w_max"]
     )
@@ -287,7 +290,7 @@ def run_100pct_strict_allocation(df_valid):
 
     matched_indices = pigs[strict_mask].index
 
-    # 목표두수만큼 선착순 할당 (일치 수량이 부족해도 일치 건만 배정)
+    # 목표두수 한도 내 배정 (부족하면 있는 수량만큼만 할당)
     allocated_indices = matched_indices[:target_cnt]
     pigs.loc[allocated_indices, "배정거래처"] = comp_name
 
@@ -305,7 +308,7 @@ def run_100pct_strict_allocation(df_valid):
         "달성률": achieve_rate,
     })
 
-  # 미분류 수량 추가
+  # 미분류(조건 불일치 잔여 물량) 추출
   unallocated_df = pigs[pigs["배정거래처"] == "미분류"].copy()
   unallocated_cnt = len(unallocated_df)
 
