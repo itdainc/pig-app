@@ -3,7 +3,7 @@ import pandas as pd
 
 # ==============================================================================
 # 업체별 세부 배정 조건 초기 변수 데이터 구조화
-# (중량 및 등지방 변수를 각각 최소/최대로 완벽히 분리)
+# (배제농가 변수 "exclude_farms" 추가)
 # ==============================================================================
 INITIAL_COMPANY_CONDITIONS = [
     {
@@ -21,6 +21,7 @@ INITIAL_COMPANY_CONDITIONS = [
         "grades": ["2"],
         "defect_str": "",
         "no_defect_only": False,
+        "exclude_farms": "",  # 배제농가 초기 변수
     },
     {
         "order": 2,
@@ -37,6 +38,7 @@ INITIAL_COMPANY_CONDITIONS = [
         "grades": ["1", "1+", "2"],
         "defect_str": "",
         "no_defect_only": False,
+        "exclude_farms": "",
     },
     {
         "order": 3,
@@ -53,6 +55,7 @@ INITIAL_COMPANY_CONDITIONS = [
         "grades": ["1", "1+", "2"],
         "defect_str": "",
         "no_defect_only": False,
+        "exclude_farms": "",
     },
     {
         "order": 4,
@@ -69,6 +72,7 @@ INITIAL_COMPANY_CONDITIONS = [
         "grades": ["1", "1+"],
         "defect_str": "",
         "no_defect_only": False,
+        "exclude_farms": "",
     },
     {
         "order": 5,
@@ -85,6 +89,7 @@ INITIAL_COMPANY_CONDITIONS = [
         "grades": ["1", "1+"],
         "defect_str": "하자 없음",
         "no_defect_only": True,
+        "exclude_farms": "",
     },
     {
         "order": 6,
@@ -101,6 +106,7 @@ INITIAL_COMPANY_CONDITIONS = [
         "grades": ["1", "1+"],
         "defect_str": "하자 없음",
         "no_defect_only": True,
+        "exclude_farms": "",
     },
     {
         "order": 7,
@@ -117,6 +123,7 @@ INITIAL_COMPANY_CONDITIONS = [
         "grades": ["1", "1+"],
         "defect_str": "하자 없음",
         "no_defect_only": True,
+        "exclude_farms": "",
     },
     {
         "order": 8,
@@ -133,6 +140,7 @@ INITIAL_COMPANY_CONDITIONS = [
         "grades": ["1", "1+"],
         "defect_str": "하자 없음",
         "no_defect_only": True,
+        "exclude_farms": "",
     },
     {
         "order": 9,
@@ -149,6 +157,7 @@ INITIAL_COMPANY_CONDITIONS = [
         "grades": ["1", "1+"],
         "defect_str": "하자 없음",
         "no_defect_only": True,
+        "exclude_farms": "",
     },
     {
         "order": 10,
@@ -165,6 +174,7 @@ INITIAL_COMPANY_CONDITIONS = [
         "grades": ["1", "1+"],
         "defect_str": "하자 없음",
         "no_defect_only": True,
+        "exclude_farms": "",
     },
     {
         "order": 11,
@@ -181,6 +191,7 @@ INITIAL_COMPANY_CONDITIONS = [
         "grades": ["1", "1+"],
         "defect_str": "하자 없음",
         "no_defect_only": True,
+        "exclude_farms": "",
     },
     {
         "order": 12,
@@ -197,6 +208,7 @@ INITIAL_COMPANY_CONDITIONS = [
         "grades": ["1", "1+"],
         "defect_str": "",
         "no_defect_only": False,
+        "exclude_farms": "",
     },
 ]
 
@@ -222,6 +234,7 @@ def get_company_conditions_df(conditions_list=None):
         "최대 등지방": item["fat_max"],
         "등급": item["grade_str"],
         "하자": item["defect_str"],
+        "배제농가": item.get("exclude_farms", ""),  # 마지막 열 추가
     })
   return pd.DataFrame(rows)
 
@@ -250,7 +263,6 @@ def run_100pct_strict_allocation(df_valid, custom_targets=None):
   for spec in sorted_specs:
     comp_name = spec["company"]
 
-    # 동적 수정된 목표두수가 넘어올 경우 변수값 덮어쓰기
     if custom_targets is not None and comp_name in custom_targets:
       target_cnt = int(custom_targets[comp_name])
     else:
@@ -258,7 +270,7 @@ def run_100pct_strict_allocation(df_valid, custom_targets=None):
 
     unassigned_mask = pigs["배정거래처"] == "미분류"
 
-    # 변수화된 조건 수치 매칭 (중량, 등지방, 등급, 하자)
+    # 기본 조건 마스킹 (중량, 등지방, 등급)
     cond_weight = (pigs["w_num"] >= spec["weight_min"]) & (
         pigs["w_num"] <= spec["weight_max"]
     )
@@ -267,13 +279,21 @@ def run_100pct_strict_allocation(df_valid, custom_targets=None):
     )
     cond_grade = pigs["grade_str"].isin(spec["grades"])
 
+    strict_mask = unassigned_mask & cond_weight & cond_fat & cond_grade
+
+    # 하자 조건 반영
     if spec["no_defect_only"]:
-      cond_defect = pigs["no_defect"] == True
-      strict_mask = (
-          unassigned_mask & cond_weight & cond_fat & cond_grade & cond_defect
-      )
-    else:
-      strict_mask = unassigned_mask & cond_weight & cond_fat & cond_grade
+      strict_mask = strict_mask & (pigs["no_defect"] == True)
+
+    # 💡 배제농가 조건 반영 (AJ열 출하자명 기준)
+    exclude_str = spec.get("exclude_farms", "")
+    if exclude_str and "farm_name" in pigs.columns:
+      exclude_list = [
+          f.strip() for f in str(exclude_str).split(",") if f.strip()
+      ]
+      if exclude_list:
+        cond_not_excluded = ~pigs["farm_name"].isin(exclude_list)
+        strict_mask = strict_mask & cond_not_excluded
 
     matched_indices = pigs[strict_mask].index
 
