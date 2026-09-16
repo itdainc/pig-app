@@ -3,18 +3,18 @@ import pandas as pd
 import io
 from datetime import datetime
 
-# ----------------- 엑셀 위치 지정 로더 (5~6행 헤더, 7행 데이터, I열=중량, J열=등지방) -----------------
+# ----------------- 엑셀 위치 지정 로더 (7행부터 데이터 시작, I열=8, J열=9) -----------------
 def load_excel_by_coords(file):
     file.seek(0)
-    # 엑셀의 5~6번째 행(인덱스 4, 5)을 병합 헤더로 지정하고 7번째 행부터 데이터로 판독
-    df = pd.read_excel(file, header=[4, 5])
+    # 상단 6개 행을 건너뛰고 7번째 행(인덱스 6)부터 데이터만 깔끔하게 읽기 (KeyError 방지)
+    df = pd.read_excel(file, skiprows=6, header=None)
+    
+    # I열(인덱스 8: 중량) & J열(인덱스 9: 등지방) 수치 변환
+    df['w_num'] = pd.to_numeric(df.iloc[:, 8], errors='coerce')
+    df['f_num'] = pd.to_numeric(df.iloc[:, 9], errors='coerce')
     
     w_col_name = "I열(중량)"
     f_col_name = "J열(등지방)"
-    
-    # I열(인덱스 8: 중량) & J열(인덱스 9: 등지방) 위치 기반(iloc) 수치 변환
-    df['w_num'] = pd.to_numeric(df.iloc[:, 8], errors='coerce')
-    df['f_num'] = pd.to_numeric(df.iloc[:, 9], errors='coerce')
     
     return df, w_col_name, f_col_name
 
@@ -91,7 +91,7 @@ if check_password():
             st.subheader("🚀 자동 배정 연산 및 분석")
             
             # -------------------------------------------------------------------------
-            # 1. 등급판정 결과 분석 표 (I열, J열 7행 이후 데이터 기준)
+            # 1. 등급판정 결과 분석 표 (I열 7행~, J열 7행~ 기준)
             # -------------------------------------------------------------------------
             st.markdown("### 📊 1. 등급판정 결과 데이터 규격 분석")
             
@@ -99,7 +99,7 @@ if check_password():
                 try:
                     df_raw, w_col_name, f_col_name = load_excel_by_coords(uploaded_grade)
                     
-                    # 결측치 제외 유효 데이터 처리
+                    # 결측치 제외 유효 데이터 추출
                     df_valid = df_raw.dropna(subset=['w_num', 'f_num'])
                     
                     # 조건 1: 마장동 스펙 (중량 85~97kg AND 등지방 18~27mm)
@@ -137,7 +137,7 @@ if check_password():
                     })
                     
                     st.table(analysis_table)
-                    st.info(f"💡 **분석 좌표:** I7열 이후 중량 / J7열 이후 등지방 | **총 유효 입고두수:** {tot_cnt:,}두 (마장동: {c1_cnt:,}두 / 두꺼운 지육: {c2_cnt:,}두 / 얇은·소형: {c3_cnt:,}두)")
+                    st.info(f"💡 **분석 범위:** 7번째 행 이하 데이터 (I열 중량 / J열 등지방) | **총 입고두수:** {tot_cnt:,}두 (마장동: {c1_cnt:,}두 / 두꺼운 지육: {c2_cnt:,}두 / 얇은·소형: {c3_cnt:,}두)")
                 except Exception as e:
                     st.error(f"등급판정 파일 분석 중 오류 발생: {e}")
             else:
