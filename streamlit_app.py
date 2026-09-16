@@ -162,7 +162,7 @@ if check_password():
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                             )
 
-                    # 1차 배정 미분류 내역 및 엑셀 다운로드 버튼
+                    # 1차 배정 미분류 내역 및 엑셀 다운로드 버튼 (버튼 위치를 표 아래로 변경)
                     if not unallocated_df.empty:
                         with st.expander("⚠️ 1차 배정 미분류 (잔여 물량) 내역 보기", expanded=False):
                             today_str = datetime.now().strftime("%Y-%m-%d")
@@ -170,14 +170,16 @@ if check_password():
                             with pd.ExcelWriter(output_unalloc, engine='openpyxl') as writer:
                                 unallocated_df.to_excel(writer, sheet_name='1차_미분류내역', index=False)
                             
+                            st.dataframe(unallocated_df, use_container_width=True)
+
                             st.download_button(
                                 label="📥 1차 배정 미분류 엑셀 다운로드",
                                 data=output_unalloc.getvalue(),
                                 file_name=f"{today_str}_1차배정_미분류내역.xlsx",
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                             )
-                            st.dataframe(unallocated_df, use_container_width=True)
 
+                    # 전체 개체별 세부 배정 내역 (버튼 위치를 표 아래로 변경)
                     with st.expander("📋 전체 개체별 세부 배정 내역 보기", expanded=False):
                         today_str = datetime.now().strftime("%Y-%m-%d")
                         summary = pigs.groupby(['배정거래처']).size().reset_index(name='수량')
@@ -188,17 +190,18 @@ if check_password():
                             summary.to_excel(writer, sheet_name='요약')
                         processed_data = output.getvalue()
                         
+                        display_df = pigs[[8, 9, 22, 'w_num', 'f_num', 'grade_str', '배정거래처']].copy()
+                        display_df.columns = ['도체번호', '중량(원본)', '등지방(원본)', '중량(숫자)', '등지방(숫자)', '등급', '배정거래처']
+                        calc_height = (len(display_df) + 1) * 35 + 10
+                        
+                        st.dataframe(display_df, height=calc_height, use_container_width=True)
+
                         st.download_button(
                             label="📥 전체 배정 결과 엑셀 다운로드",
                             data=processed_data,
                             file_name=f"{today_str}_배정결과.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         )
-
-                        display_df = pigs[[8, 9, 22, 'w_num', 'f_num', 'grade_str', '배정거래처']].copy()
-                        display_df.columns = ['도체번호', '중량(원본)', '등지방(원본)', '중량(숫자)', '등지방(숫자)', '등급', '배정거래처']
-                        calc_height = (len(display_df) + 1) * 35 + 10
-                        st.dataframe(display_df, height=calc_height, use_container_width=True)
 
                 except Exception as e:
                     st.error(f"1차 배정 처리 중 오류가 발생했습니다: {e}")
