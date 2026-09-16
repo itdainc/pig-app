@@ -9,7 +9,6 @@ try:
 except ImportError:
     def check_password(): return True
 
-# 💡 불필요해진 auto_allocator.py, first_allocator.py 호출 부분 완전 삭제
 try:
     from company_conditions import (
         get_company_conditions_df,
@@ -45,7 +44,6 @@ def load_excel_by_coords(file):
     df['no_defect'] = df.iloc[:, 11:21].apply(check_no_defect, axis=1)
     df['배정거래처'] = '미분류'
     
-    # 💡 사용되지 않던 w_col_name, f_col_name 변수 반환 삭제 완료
     return df
 
 # 로그인 검증
@@ -55,8 +53,6 @@ if check_password():
 
     if 'main_menu' not in st.session_state:
         st.session_state.main_menu = "배정"
-        
-    # 💡 더 이상 사용하지 않는 st.session_state.target_df 메모리 삭제 완료
 
     st.sidebar.title("📌 메인 메뉴")
 
@@ -94,7 +90,6 @@ if check_password():
                     df_raw = load_excel_by_coords(uploaded_grade)
                     df_valid = df_raw.dropna(subset=['w_num', 'f_num'])
                     
-                    # 💡 파일 업로드 즉시 백그라운드 1차 배정 연산 및 세션 저장
                     pigs, unallocated_df, _ = run_100pct_strict_allocation(df_valid)
                     st.session_state['allocated_pigs'] = pigs
                     
@@ -171,12 +166,9 @@ if check_password():
                         with st.expander("⚠️ 1차 배정 미분류 (잔여 물량) 내역 보기", expanded=False):
                             st.dataframe(unallocated_df, use_container_width=True)
 
-                    st.markdown(" ")
-                    col_main, _ = st.columns([4, 1])
-                    with col_main:
-                        st.subheader("📋 전체 개체별 세부 배정 내역")
+                    # 💡 요청하신 전체 개체별 세부 배정 내역 접이식(st.expander) 메뉴 변환 적용
+                    with st.expander("📋 전체 개체별 세부 배정 내역 보기", expanded=False):
                         today_str = datetime.now().strftime("%Y-%m-%d")
-                        
                         summary = pigs.groupby(['배정거래처']).size().reset_index(name='수량')
 
                         output = io.BytesIO()
@@ -196,6 +188,7 @@ if check_password():
                         display_df.columns = ['도체번호', '중량(원본)', '등지방(원본)', '중량(숫자)', '등지방(숫자)', '등급', '배정거래처']
                         calc_height = (len(display_df) + 1) * 35 + 10
                         st.dataframe(display_df, height=calc_height, use_container_width=True)
+
                 except Exception as e:
                     st.error(f"1차 배정 처리 중 오류가 발생했습니다: {e}")
             else:
@@ -226,7 +219,7 @@ if check_password():
                 st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
 
     # ==============================================================================
-    # [메뉴 2] 농가 분석 (정상 작동하도록 복구 및 최적화)
+    # [메뉴 2] 농가 분석
     # ==============================================================================
     elif st.session_state.main_menu == "농가분석":
         st.title("📊 농가별 출하 및 스펙 분석")
@@ -241,8 +234,6 @@ if check_password():
                     return parts[1], parts[0]
                 return s_val, '-'
 
-            # 엑셀의 12번 인덱스(M열 부근) 또는 특정 컬럼이 출하농가인지 확인해야 하나,
-            # 현재 코드상 안전하게 인덱스 16번(출하농가)이 존재할 경우만 실행
             if 16 in pigs_all.columns:
                 pigs_all[['농가_명', '사료사_명']] = pigs_all[16].apply(lambda x: pd.Series(extract_feed_and_farm(x)))
                 farm_groups = pigs_all.groupby(['농가_명', '사료사_명'])
