@@ -55,13 +55,19 @@ if check_password():
         st.session_state.main_menu = "배정"
 
     # ------------------------------------------------------------------------------
-    # 💡 세션 거래처 목록을 최신 company_conditions.py 조건표와 자동 동기화
-    # (과거의 '염주골 1', '마루푸드' 등 쓰레기 데이터 초기화 및 최신화)
+    # 💡 세션 거래처 목록 동기화 (KeyError 방지용 안전 검사 로직 적용)
     # ------------------------------------------------------------------------------
     df_cond = get_company_conditions_df()
     current_cond_companies = list(df_cond['거래처']) if not df_cond.empty else []
 
-    if 'target_df' not in st.session_state or list(st.session_state.target_df['거래처']) != current_cond_companies:
+    is_target_valid = (
+        'target_df' in st.session_state 
+        and isinstance(st.session_state.target_df, pd.DataFrame)
+        and '거래처' in st.session_state.target_df.columns
+        and list(st.session_state.target_df['거래처']) == current_cond_companies
+    )
+
+    if not is_target_valid:
         if not df_cond.empty:
             st.session_state.target_df = df_cond[['거래처', '목표두수']].copy()
         else:
@@ -181,7 +187,6 @@ if check_password():
             
             if uploaded_grade:
                 try:
-                    # 세션에 저장된 사용자 커스텀 목표두수를 딕셔너리로 변환하여 넘김
                     custom_targets = dict(zip(st.session_state.target_df['거래처'], st.session_state.target_df['목표두수']))
                     
                     pigs, unallocated_df, summary_df = run_100pct_strict_allocation(df_valid, custom_targets)
@@ -192,7 +197,6 @@ if check_password():
                     c2.metric("1차 배정 완료 수량", f"{len(pigs[pigs['배정거래처'] != '미분류'])} 두")
                     c3.metric("미분류 (잔여 물량)", f"{len(unallocated_df)} 두")
                     
-                    # [업체별 1차 배정 달성 요약] 표 출력
                     st.markdown("#### 📊 업체별 1차 배정 달성 요약")
                     if not summary_df.empty:
                         comp_summary = summary_df[summary_df['거래처명'] != '미분류 (잔여 물량)'].copy()
@@ -206,7 +210,7 @@ if check_password():
                         calc_summary_height = (len(display_summary) + 1) * 35 + 10
                         st.dataframe(display_summary, height=calc_summary_height, use_container_width=True, hide_index=True)
 
-                    # ---------------- 아코디언 메뉴 구성 ----------------
+                    # ---------------- 아코디언 메뉴 ----------------
                     
                     # 1. 1차 배정 내역보기 (맨 위)
                     with st.expander("📋 1차 배정 내역보기(스팩 100% 일치)", expanded=False):
