@@ -26,7 +26,7 @@ except ImportError:
   def get_company_conditions_excel_bytes():
     return b''
 
-  def run_100pct_strict_allocation(df, custom_targets=None):
+  def run_100pct_strict_allocation(df, custom_conditions_df=None):
     df['배정거래처'] = '미분류'
     return df, pd.DataFrame(), pd.DataFrame()
 
@@ -36,7 +36,6 @@ def load_excel_by_coords(file):
   file.seek(0)
   df = pd.read_excel(file, skiprows=6, header=None)
 
-  # I열(8): 중량, J열(9): 등지방, W열(22): 등급
   df['w_num'] = pd.to_numeric(df.iloc[:, 8], errors='coerce')
   df['f_num'] = pd.to_numeric(df.iloc[:, 9], errors='coerce')
   df['grade_str'] = (
@@ -46,7 +45,7 @@ def load_excel_by_coords(file):
       .str.replace(r'\.0$', '', regex=True)
   )
 
-  # 💡 AJ열 (0기준 35번 인덱스): 출하자명(농가명) 추출 (배제농가 로직용)
+  # AJ열 (0기준 35번 인덱스): 출하자명 (배제농가 조건용)
   if df.shape[1] > 35:
     df['farm_name'] = (
         df.iloc[:, 35]
@@ -57,7 +56,6 @@ def load_excel_by_coords(file):
   else:
     df['farm_name'] = ''
 
-  # L열(11) ~ U열(20) 하자 여부 판별
   def check_no_defect(row_slice):
     for val in row_slice:
       if pd.notna(val):
@@ -84,6 +82,9 @@ if check_password():
   if 'main_menu' not in st.session_state:
     st.session_state.main_menu = '배정'
 
+  # ------------------------------------------------------------------------------
+  # 💡 조건표 동기화 및 세부 항목 초기화
+  # ------------------------------------------------------------------------------
   df_cond = get_company_conditions_df()
   current_cond_companies = list(df_cond['거래처']) if not df_cond.empty else []
 
@@ -95,10 +96,7 @@ if check_password():
   )
 
   if not is_target_valid:
-    if not df_cond.empty:
-      st.session_state.target_df = df_cond[['거래처', '목표두수']].copy()
-    else:
-      st.session_state.target_df = pd.DataFrame(columns=['거래처', '목표두수'])
+    st.session_state.target_df = df_cond.copy()
 
   # 📌 사이드바 메뉴
   st.sidebar.title('📌 메인 메뉴')
@@ -222,11 +220,12 @@ if check_password():
 
       st.markdown('---')
 
-      # --- 2. 목표두수 수정 ---
-      st.markdown('### ✏️ 2. 목표두수 수정 및 변경')
+      # --- 2. 목표두수 및 세부 조건 수정 ---
+      st.markdown('### ✏️ 2. 거래처별 세부 배정 조건 수정 및 변경')
       st.info(
-          '💡 각 업체별 배정할 **목표두수** 숫자를 클릭하여 직접 수정한 후 **[💾'
-          ' 변경사항 적용 및 재연산]** 버튼을 누르세요.'
+          '💡 거래처별 **목표두수, 중량, 등지방, 등급, 하자, 배제농가**'
+          ' 항목을 직접 수정하고 하단 버튼을 누르면 배정 연산에 즉시'
+          ' 반영됩니다.'
       )
 
       edited_target_df = st.data_editor(
@@ -234,9 +233,22 @@ if check_password():
           use_container_width=True,
           hide_index=True,
           column_config={
+              '배정순서': st.column_config.Column('배정순서', disabled=True),
               '거래처': st.column_config.Column('거래처명', disabled=True),
+              '중요도': st.column_config.Column('중요도', disabled=True),
+              '암 비율': st.column_config.Column('암 비율', disabled=True),
+              '지급률': st.column_config.Column('지급률', disabled=True),
               '목표두수': st.column_config.NumberColumn(
-                  '목표두수 (수정가능)', min_value=0, step=1
+                  '목표두수', min_value=0, step=1
+              ),
+              '최소 중량': st.column_config.NumberColumn('최소 중량'),
+              '최대 중량': st.column_config.NumberColumn('최대 중량'),
+              '최소 등지방': st.column_config.NumberColumn('최소 등지방'),
+              '최대 등지방': st.column_config.NumberColumn('최대 등지방'),
+              '등급': st.column_config.TextColumn('등급'),
+              '하자': st.column_config.TextColumn('하자'),
+              '배제농가': st.column_config.TextColumn(
+                  '배제농가 (쉼표 분리 가능)'
               ),
           },
       )
@@ -245,10 +257,7 @@ if check_password():
           '💾 변경사항 적용 및 재연산', type='primary', use_container_width=True
       ):
         st.session_state.target_df = edited_target_df
-        st.success(
-            '✅ 목표두수가 업데이트되었습니다. 하단 3번의 재연산 결과를'
-            ' 확인하세요.'
-        )
+        st.success('✅ 거래처별 세부 배정 조건이 업데이트되었습니다.')
         st.rerun()
 
       st.markdown('---')
@@ -258,15 +267,8 @@ if check_password():
 
       if uploaded_grade:
         try:
-          custom_targets = dict(
-              zip(
-                  st.session_state.target_df['거래처'],
-                  st.session_state.target_df['목표두수'],
-              )
-          )
-
           pigs, unallocated_df, summary_df = run_100pct_strict_allocation(
-              df_valid, custom_targets
+              df_valid, st.session_state.target_df
           )
           st.session_state['allocated_pigs'] = pigs
 
@@ -314,8 +316,6 @@ if check_password():
             )
 
           # ---------------- 아코디언 메뉴 ----------------
-
-          # 1. 1차 배정 내역보기
           with st.expander(
               '📋 1차 배정 내역보기(스팩 100% 일치)', expanded=False
           ):
@@ -361,7 +361,6 @@ if check_password():
                 mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             )
 
-          # 2. 1차 배정 미분류 내역
           if not unallocated_df.empty:
             with st.expander(
                 '⚠️ 1차 배정 미분류 (잔여 물량) 내역 보기', expanded=False
@@ -382,7 +381,6 @@ if check_password():
                   mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
               )
 
-          # 3. 업체별 세부 배정 조건표 (배제농가 포함)
           with st.expander(
               '📋 업체별 세부 배정 조건표 조회 및 엑셀 다운로드', expanded=False
           ):
