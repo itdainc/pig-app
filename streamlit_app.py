@@ -162,11 +162,22 @@ if check_password():
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                             )
 
+                    # 1차 배정 미분류 내역 및 엑셀 다운로드 버튼
                     if not unallocated_df.empty:
                         with st.expander("⚠️ 1차 배정 미분류 (잔여 물량) 내역 보기", expanded=False):
+                            today_str = datetime.now().strftime("%Y-%m-%d")
+                            output_unalloc = io.BytesIO()
+                            with pd.ExcelWriter(output_unalloc, engine='openpyxl') as writer:
+                                unallocated_df.to_excel(writer, sheet_name='1차_미분류내역', index=False)
+                            
+                            st.download_button(
+                                label="📥 1차 배정 미분류 엑셀 다운로드",
+                                data=output_unalloc.getvalue(),
+                                file_name=f"{today_str}_1차배정_미분류내역.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
                             st.dataframe(unallocated_df, use_container_width=True)
 
-                    # 💡 요청하신 전체 개체별 세부 배정 내역 접이식(st.expander) 메뉴 변환 적용
                     with st.expander("📋 전체 개체별 세부 배정 내역 보기", expanded=False):
                         today_str = datetime.now().strftime("%Y-%m-%d")
                         summary = pigs.groupby(['배정거래처']).size().reset_index(name='수량')
