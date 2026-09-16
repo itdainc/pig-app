@@ -221,7 +221,6 @@ COMPANY_CONDITIONS_DATA = [
     },
 ]
 
-
 def get_company_conditions_df():
   """조회용 데이터프레임 반환"""
   df = pd.DataFrame(COMPANY_CONDITIONS_DATA)
@@ -239,7 +238,6 @@ def get_company_conditions_df():
   ]
   return df[cols]
 
-
 def get_company_conditions_excel_bytes():
   """엑셀 다운로드 파일 반환"""
   df = get_company_conditions_df()
@@ -248,64 +246,52 @@ def get_company_conditions_excel_bytes():
     df.to_excel(writer, sheet_name="1차배정조건표", index=False)
   return output.getvalue()
 
-
-def run_100pct_strict_allocation(df_valid):
+def run_100pct_strict_allocation(df_valid, custom_targets=None):
   """1차 배정 핵심 연산
-
-  - 배정순서(1~12) 및 중요도 가중치 정렬 순서 준수
-  - 중량, 등지방, 등급, 하자 여부 100% 일치 시에만 선착순 배정
-  - 목표두수 미달 허용 (일치 물량만 채움)
-  - 미부합 물량은 '미분류'로 자동 보관
+  :param custom_targets: 화면에서 수정된 목표두수 딕셔너리 (예: {"염주골": 25, ...})
   """
   pigs = df_valid.copy()
-  pigs["배정거래처"] = "미분류"  # 컬럼 필수 보장
+  pigs["배정거래처"] = "미분류"  
 
   summary_rows = []
 
-  # 1. 배정순서 오름차순 (1 -> 2 -> 3 ...), 동일 순서 시 중요도 내림차순 가중치
   sorted_specs = sorted(
       COMPANY_CONDITIONS_DATA, key=lambda x: (x["배정순서"], -x["중요도"])
   )
 
   for spec in sorted_specs:
     comp_name = spec["거래처"]
-    target_cnt = spec["목표두수"]
+    
+    # 전달받은 커스텀 목표두수가 있으면 우선 적용, 없으면 기본값 적용
+    if custom_targets is not None and comp_name in custom_targets:
+        target_cnt = int(custom_targets[comp_name])
+    else:
+        target_cnt = spec["목표두수"]
 
-    # 아직 배정되지 않은 미분류 개체 대상
     unassigned_mask = pigs["배정거래처"] == "미분류"
 
-    # 100% 조건 필터링
-    cond_weight = (pigs["w_num"] >= spec["w_min"]) & (
-        pigs["w_num"] <= spec["w_max"]
-    )
-    cond_fat = (pigs["f_num"] >= spec["f_min"]) & (
-        pigs["f_num"] <= spec["f_max"]
-    )
+    cond_weight = (pigs["w_num"] >= spec["w_min"]) & (pigs["w_num"] <= spec["w_max"])
+    cond_fat = (pigs["f_num"] >= spec["f_min"]) & (pigs["f_num"] <= spec["f_max"])
     cond_grade = pigs["grade_str"].isin(spec["grades"])
 
     if spec["no_defect_only"]:
       cond_defect = pigs["no_defect"] == True
-      strict_mask = (
-          unassigned_mask & cond_weight & cond_fat & cond_grade & cond_defect
-      )
+      strict_mask = unassigned_mask & cond_weight & cond_fat & cond_grade & cond_defect
     else:
       strict_mask = unassigned_mask & cond_weight & cond_fat & cond_grade
 
     matched_indices = pigs[strict_mask].index
 
-    # 목표두수 한도 내 배정 (부족 시 일치 건만 배정)
+    # 목표두수 한도 내 선착순 할당
     allocated_indices = matched_indices[:target_cnt]
     pigs.loc[allocated_indices, "배정거래처"] = comp_name
 
     allocated_cnt = len(allocated_indices)
-    achieve_rate = (
-        f"{(allocated_cnt / target_cnt * 100):.1f}%" if target_cnt > 0 else "-"
-    )
+    achieve_rate = f"{(allocated_cnt / target_cnt * 100):.1f}%" if target_cnt > 0 else "-"
 
     summary_rows.append({
         "배정순서": spec["배정순서"],
         "거래처명": comp_name,
-        "중요도": spec["중요도"],
         "목표두수": target_cnt,
         "1차 배정두수": allocated_cnt,
         "달성률": achieve_rate,
@@ -317,7 +303,6 @@ def run_100pct_strict_allocation(df_valid):
   summary_rows.append({
       "배정순서": "-",
       "거래처명": "미분류 (잔여 물량)",
-      "중요도": "-",
       "목표두수": "-",
       "1차 배정두수": unallocated_cnt,
       "달성률": "-",
