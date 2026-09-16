@@ -3,7 +3,6 @@ import pandas as pd
 
 # ==============================================================================
 # 업체별 세부 배정 조건 초기 변수 데이터 구조화
-# (배제농가 변수 "exclude_farms" 추가)
 # ==============================================================================
 INITIAL_COMPANY_CONDITIONS = [
     {
@@ -21,7 +20,7 @@ INITIAL_COMPANY_CONDITIONS = [
         "grades": ["2"],
         "defect_str": "",
         "no_defect_only": False,
-        "exclude_farms": "",  # 배제농가 초기 변수
+        "exclude_farms": "",
     },
     {
         "order": 2,
@@ -234,7 +233,7 @@ def get_company_conditions_df(conditions_list=None):
         "최대 등지방": item["fat_max"],
         "등급": item["grade_str"],
         "하자": item["defect_str"],
-        "배제농가": item.get("exclude_farms", ""),  # 마지막 열 추가
+        "배제농가": item.get("exclude_farms", ""),
     })
   return pd.DataFrame(rows)
 
@@ -248,14 +247,18 @@ def get_company_conditions_excel_bytes(conditions_list=None):
   return output.getvalue()
 
 
-def run_100pct_strict_allocation(df_valid, custom_targets=None):
-  """변수 기반 1차 100% 스펙 일치 자동 배정 연산 로직"""
+def run_100pct_strict_allocation(df_valid, custom_conditions_df=None):
+  """동적 커스텀 조건표를 반영한 1차 100% 스펙 일치 자동 배정 연산 로직"""
   pigs = df_valid.copy()
   pigs["배정거래처"] = "미분류"
 
   summary_rows = []
 
-  # 배정순서 오름차순, 동일 시 중요도 내림차순 정렬
+  # 커스텀 조건표 딕셔너리화
+  custom_dict = {}
+  if custom_conditions_df is not None and not custom_conditions_df.empty:
+    custom_dict = custom_conditions_df.set_index("거래처").to_dict("index")
+
   sorted_specs = sorted(
       INITIAL_COMPANY_CONDITIONS, key=lambda x: (x["order"], -x["importance"])
   )
@@ -263,30 +266,66 @@ def run_100pct_strict_allocation(df_valid, custom_targets=None):
   for spec in sorted_specs:
     comp_name = spec["company"]
 
-    if custom_targets is not None and comp_name in custom_targets:
-      target_cnt = int(custom_targets[comp_name])
+    # 사용자 지정 동적 수정 조건 반영
+    if comp_name in custom_dict:
+      row_c = custom_dict[comp_name]
+      try:
+        target_cnt = int(row_c.get("목표두수", spec["target_cnt"]))
+      except Exception:
+        target_cnt = spec["target_cnt"]
+
+      try:
+        weight_min = float(row_c.get("최소 중량", spec["weight_min"]))
+      except Exception:
+        weight_min = spec["weight_min"]
+
+      try:
+        weight_max = float(row_c.get("최대 중량", spec["weight_max"]))
+      except Exception:
+        weight_max = spec["weight_max"]
+
+      try:
+        fat_min = float(row_c.get("최소 등지방", spec["fat_min"]))
+      except Exception:
+        fat_min = spec["fat_min"]
+
+      try:
+        fat_max = float(row_c.get("최대 등지방", spec["fat_max"]))
+      except Exception:
+        fat_max = spec["fat_max"]
+
+      grade_str_val = str(row_c.get("등급", spec["grade_str"]))
+      grades = [g.strip() for g in grade_str_val.split(",") if g.strip()]
+
+      defect_val = str(row_c.get("하자", spec["defect_str"])).strip()
+      no_defect_only = True if "없음" in defect_val else False
+
+      exclude_str = str(
+          row_c.get("배제농가", spec.get("exclude_farms", ""))
+      ).strip()
+      if exclude_str.lower() in ["nan", "none"]:
+        exclude_str = ""
     else:
       target_cnt = spec["target_cnt"]
+      weight_min = spec["weight_min"]
+      weight_max = spec["weight_max"]
+      fat_min = spec["fat_min"]
+      fat_max = spec["fat_max"]
+      grades = spec["grades"]
+      no_defect_only = spec["no_defect_only"]
+      exclude_str = spec.get("exclude_farms", "")
 
     unassigned_mask = pigs["배정거래처"] == "미분류"
 
-    # 기본 조건 마스킹 (중량, 등지방, 등급)
-    cond_weight = (pigs["w_num"] >= spec["weight_min"]) & (
-        pigs["w_num"] <= spec["weight_max"]
-    )
-    cond_fat = (pigs["f_num"] >= spec["fat_min"]) & (
-        pigs["f_num"] <= spec["fat_max"]
-    )
-    cond_grade = pigs["grade_str"].isin(spec["grades"])
+    cond_weight = (pigs["w_num"] >= weight_min) & (pigs["w_num"] <= weight_max)
+    cond_fat = (pigs["f_num"] >= fat_min) & (pigs["f_num"] <= fat_max)
+    cond_grade = pigs["grade_str"].isin(grades)
 
     strict_mask = unassigned_mask & cond_weight & cond_fat & cond_grade
 
-    # 하자 조건 반영
-    if spec["no_defect_only"]:
+    if no_defect_only:
       strict_mask = strict_mask & (pigs["no_defect"] == True)
 
-    # 💡 배제농가 조건 반영 (AJ열 출하자명 기준)
-    exclude_str = spec.get("exclude_farms", "")
     if exclude_str and "farm_name" in pigs.columns:
       exclude_list = [
           f.strip() for f in str(exclude_str).split(",") if f.strip()
@@ -297,21 +336,16 @@ def run_100pct_strict_allocation(df_valid, custom_targets=None):
 
     matched_indices = pigs[strict_mask].index
 
-    # 목표두수 한도 내 할당
     allocated_indices = matched_indices[:target_cnt]
     pigs.loc[allocated_indices, "배정거래처"] = comp_name
 
     allocated_cnt = len(allocated_indices)
-    achieve_rate = (
-        f"{(allocated_cnt / target_cnt * 100):.1f}%" if target_cnt > 0 else "-"
-    )
 
     summary_rows.append({
         "배정순서": spec["order"],
         "거래처명": comp_name,
         "목표두수": target_cnt,
         "1차 배정두수": allocated_cnt,
-        "달성률": achieve_rate,
     })
 
   unallocated_df = pigs[pigs["배정거래처"] == "미분류"].copy()
@@ -322,7 +356,6 @@ def run_100pct_strict_allocation(df_valid, custom_targets=None):
       "거래처명": "미분류 (잔여 물량)",
       "목표두수": "-",
       "1차 배정두수": unallocated_cnt,
-      "달성률": "-",
   })
 
   summary_df = pd.DataFrame(summary_rows)
