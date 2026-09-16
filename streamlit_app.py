@@ -18,7 +18,7 @@ try:
 except ImportError:
     def get_company_conditions_df(): return pd.DataFrame()
     def get_company_conditions_excel_bytes(): return b''
-    def run_100pct_strict_allocation(df): 
+    def run_100pct_strict_allocation(df, custom_targets=None): 
         df['배정거래처'] = '미분류'
         return df, pd.DataFrame(), pd.DataFrame()
 
@@ -54,6 +54,14 @@ if check_password():
     if 'main_menu' not in st.session_state:
         st.session_state.main_menu = "배정"
 
+    # 💡 목표두수 변수를 세션 스테이트(메모리)에 초기화 (1회만 실행)
+    if 'target_df' not in st.session_state:
+        df_cond = get_company_conditions_df()
+        if not df_cond.empty:
+            st.session_state.target_df = df_cond[['거래처', '목표두수']].copy()
+        else:
+            st.session_state.target_df = pd.DataFrame(columns=['거래처', '목표두수'])
+
     st.sidebar.title("📌 메인 메뉴")
 
     if st.sidebar.button("🏢 1. 거래처 자동 배정 시스템", type="primary" if st.session_state.main_menu == "배정" else "secondary", use_container_width=True):
@@ -83,6 +91,8 @@ if check_password():
         # ----------------- 탭 1: 자동 배정 실행 -----------------
         with tab1:
             st.subheader("🚀 자동 배정 연산 및 분석")
+            
+            # --------------------- 1. 규격 분석 ---------------------
             st.markdown("### 📊 1. 등급판정 결과 데이터 규격 분석")
             
             if uploaded_grade:
@@ -90,9 +100,7 @@ if check_password():
                     df_raw = load_excel_by_coords(uploaded_grade)
                     df_valid = df_raw.dropna(subset=['w_num', 'f_num'])
                     
-                    pigs, unallocated_df, summary_df = run_100pct_strict_allocation(df_valid)
-                    st.session_state['allocated_pigs'] = pigs
-                    
+                    # 규격 분석(마장동 등) 분류
                     cond1 = (
                         (df_valid['w_num'] >= 85) & (df_valid['w_num'] <= 97) & 
                         (df_valid['f_num'] >= 18) & (df_valid['f_num'] <= 27) & 
@@ -142,32 +150,57 @@ if check_password():
 
             st.markdown("---")
 
-            st.markdown("### 🤖 2. 1차 배정 (스펙일치)")
+            # --------------------- 2. 목표두수 수정 ---------------------
+            st.markdown("### ✏️ 2. 목표두수 수정 및 변경")
+            st.info("💡 각 업체별 배정할 **목표두수** 숫자를 클릭하여 직접 수정한 후 **[💾 변경사항 적용 및 재연산]** 버튼을 누르세요.")
+            
+            edited_target_df = st.data_editor(
+                st.session_state.target_df,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "거래처": st.column_config.Column("거래처명", disabled=True),
+                    "목표두수": st.column_config.NumberColumn("목표두수 (수정가능)", min_value=0, step=1)
+                }
+            )
+
+            if st.button("💾 변경사항 적용 및 재연산", type="primary", use_container_width=True):
+                st.session_state.target_df = edited_target_df
+                st.success("✅ 목표두수가 업데이트되었습니다. 하단 3번의 재연산 결과를 확인하세요.")
+                st.rerun()
+
+            st.markdown("---")
+
+            # --------------------- 3. 1차 배정 실행 ---------------------
+            st.markdown("### 🤖 3. 1차 배정 (스펙일치)")
             
             if uploaded_grade:
                 try:
+                    # 💡 세션에 저장된 사용자 커스텀 목표두수를 딕셔너리로 변환하여 넘김
+                    custom_targets = dict(zip(st.session_state.target_df['거래처'], st.session_state.target_df['목표두수']))
+                    
+                    pigs, unallocated_df, summary_df = run_100pct_strict_allocation(df_valid, custom_targets)
+                    st.session_state['allocated_pigs'] = pigs
+
                     c1, c2, c3 = st.columns(3)
                     c1.metric("총 도축 수량", f"{len(pigs)} 두")
                     c2.metric("1차 배정 완료 수량", f"{len(pigs[pigs['배정거래처'] != '미분류'])} 두")
                     c3.metric("미분류 (잔여 물량)", f"{len(unallocated_df)} 두")
                     
-                    # 💡 수정된 [업체별 1차 배정 달성 요약] 표 (배정순서 제거, 부족두수 추가, 전체출력)
                     st.markdown("#### 📊 업체별 1차 배정 달성 요약")
                     if not summary_df.empty:
                         comp_summary = summary_df[summary_df['거래처명'] != '미분류 (잔여 물량)'].copy()
                         
-                        # 숫자 형변환 및 부족두수 계산
                         comp_summary['목표두수'] = pd.to_numeric(comp_summary['목표두수'], errors='coerce').fillna(0).astype(int)
                         comp_summary['1차 배정두수'] = pd.to_numeric(comp_summary['1차 배정두수'], errors='coerce').fillna(0).astype(int)
                         comp_summary['부족두수'] = comp_summary['목표두수'] - comp_summary['1차 배정두수']
                         
                         display_summary = comp_summary[['거래처명', '목표두수', '1차 배정두수', '부족두수']]
                         
-                        # 스크롤이 생기지 않도록 모든 행 높이에 맞게 설정
                         calc_summary_height = (len(display_summary) + 1) * 35 + 10
                         st.dataframe(display_summary, height=calc_summary_height, use_container_width=True, hide_index=True)
 
-                    # 1. 1차 배정 내역보기
+                    # --- 아코디언 1 ---
                     with st.expander("📋 1차 배정 내역보기(스팩 100% 일치)", expanded=False):
                         today_str = datetime.now().strftime("%Y-%m-%d")
                         summary = pigs.groupby(['배정거래처']).size().reset_index(name='수량')
@@ -191,7 +224,7 @@ if check_password():
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         )
 
-                    # 2. 1차 배정 미분류 내역
+                    # --- 아코디언 2 ---
                     if not unallocated_df.empty:
                         with st.expander("⚠️ 1차 배정 미분류 (잔여 물량) 내역 보기", expanded=False):
                             today_str = datetime.now().strftime("%Y-%m-%d")
@@ -208,7 +241,7 @@ if check_password():
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                             )
 
-                    # 3. 업체별 세부 배정 조건표
+                    # --- 아코디언 3 ---
                     with st.expander("📋 업체별 세부 배정 조건표 조회 및 엑셀 다운로드", expanded=False):
                         cond_df = get_company_conditions_df()
                         if not cond_df.empty:
