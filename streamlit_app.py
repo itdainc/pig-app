@@ -166,8 +166,12 @@ if check_password():
             st.markdown("### ✏️ 2. 거래처별 세부 배정 조건 수정 및 변경")
             st.info("💡 거래처별 **목표두수, 중량, 등지방, 등급, 하자, 배제농가** 항목을 직접 수정하고 하단 버튼을 누르면 배정 연산에 즉시 반영됩니다.")
             
+            # 동적 높이 계산 (스크롤 없이 전체 행 표출)
+            calc_target_editor_height = (len(st.session_state.target_df) + 1) * 35 + 10
+            
             edited_target_df = st.data_editor(
                 st.session_state.target_df,
+                height=calc_target_editor_height,
                 use_container_width=True,
                 hide_index=True,
                 column_config={
@@ -217,8 +221,15 @@ if check_password():
                         
                         display_summary = comp_summary[['거래처명', '목표두수', '1차 배정두수', '부족두수']]
                         
+                        def highlight_shortage(row):
+                            if row['부족두수'] > 0:
+                                return ['background-color: rgba(255, 75, 75, 0.2); color: #ff4b4b; font-weight: bold;'] * len(row)
+                            return [''] * len(row)
+
+                        styled_summary = display_summary.style.apply(highlight_shortage, axis=1)
                         calc_summary_height = (len(display_summary) + 1) * 35 + 10
-                        st.dataframe(display_summary, height=calc_summary_height, use_container_width=True, hide_index=True)
+                        
+                        st.dataframe(styled_summary, height=calc_summary_height, use_container_width=True, hide_index=True)
 
                     # ---------------- 아코디언 메뉴 ----------------
                     with st.expander("📋 1차 배정 내역보기(스팩 100% 일치)", expanded=False):
