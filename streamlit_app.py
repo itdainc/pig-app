@@ -54,14 +54,20 @@ if check_password():
     if 'main_menu' not in st.session_state:
         st.session_state.main_menu = "배정"
 
-    # 💡 목표두수 변수를 세션 스테이트(메모리)에 초기화 (1회만 실행)
-    if 'target_df' not in st.session_state:
-        df_cond = get_company_conditions_df()
+    # ------------------------------------------------------------------------------
+    # 💡 세션 거래처 목록을 최신 company_conditions.py 조건표와 자동 동기화
+    # (과거의 '염주골 1', '마루푸드' 등 쓰레기 데이터 초기화 및 최신화)
+    # ------------------------------------------------------------------------------
+    df_cond = get_company_conditions_df()
+    current_cond_companies = list(df_cond['거래처']) if not df_cond.empty else []
+
+    if 'target_df' not in st.session_state or list(st.session_state.target_df['거래처']) != current_cond_companies:
         if not df_cond.empty:
             st.session_state.target_df = df_cond[['거래처', '목표두수']].copy()
         else:
             st.session_state.target_df = pd.DataFrame(columns=['거래처', '목표두수'])
 
+    # 📌 사이드바 메뉴
     st.sidebar.title("📌 메인 메뉴")
 
     if st.sidebar.button("🏢 1. 거래처 자동 배정 시스템", type="primary" if st.session_state.main_menu == "배정" else "secondary", use_container_width=True):
@@ -86,13 +92,13 @@ if check_password():
     if st.session_state.main_menu == "배정":
         st.title("🐖 주식회사 잇다 / 거래처 자동 배정 시스템")
 
-        tab1, tab2, tab3 = st.tabs(["🚀 자동 배정 실행", "🏢 거래처별 배정 상세", "🚚 잇다 배정 내역"])
+        tab1, tab2, tab3 = st.tabs(["🚀 자동 배정 실행", "🏢 거래처별 배정 상세", "🚚 잇다 배정 내역 (미분류)"])
 
         # ----------------- 탭 1: 자동 배정 실행 -----------------
         with tab1:
             st.subheader("🚀 자동 배정 연산 및 분석")
             
-            # --------------------- 1. 규격 분석 ---------------------
+            # --- 1. 규격 분석 ---
             st.markdown("### 📊 1. 등급판정 결과 데이터 규격 분석")
             
             if uploaded_grade:
@@ -100,7 +106,6 @@ if check_password():
                     df_raw = load_excel_by_coords(uploaded_grade)
                     df_valid = df_raw.dropna(subset=['w_num', 'f_num'])
                     
-                    # 규격 분석(마장동 등) 분류
                     cond1 = (
                         (df_valid['w_num'] >= 85) & (df_valid['w_num'] <= 97) & 
                         (df_valid['f_num'] >= 18) & (df_valid['f_num'] <= 27) & 
@@ -150,7 +155,7 @@ if check_password():
 
             st.markdown("---")
 
-            # --------------------- 2. 목표두수 수정 ---------------------
+            # --- 2. 목표두수 수정 ---
             st.markdown("### ✏️ 2. 목표두수 수정 및 변경")
             st.info("💡 각 업체별 배정할 **목표두수** 숫자를 클릭하여 직접 수정한 후 **[💾 변경사항 적용 및 재연산]** 버튼을 누르세요.")
             
@@ -171,12 +176,12 @@ if check_password():
 
             st.markdown("---")
 
-            # --------------------- 3. 1차 배정 실행 ---------------------
+            # --- 3. 1차 배정 ---
             st.markdown("### 🤖 3. 1차 배정 (스펙일치)")
             
             if uploaded_grade:
                 try:
-                    # 💡 세션에 저장된 사용자 커스텀 목표두수를 딕셔너리로 변환하여 넘김
+                    # 세션에 저장된 사용자 커스텀 목표두수를 딕셔너리로 변환하여 넘김
                     custom_targets = dict(zip(st.session_state.target_df['거래처'], st.session_state.target_df['목표두수']))
                     
                     pigs, unallocated_df, summary_df = run_100pct_strict_allocation(df_valid, custom_targets)
@@ -187,6 +192,7 @@ if check_password():
                     c2.metric("1차 배정 완료 수량", f"{len(pigs[pigs['배정거래처'] != '미분류'])} 두")
                     c3.metric("미분류 (잔여 물량)", f"{len(unallocated_df)} 두")
                     
+                    # [업체별 1차 배정 달성 요약] 표 출력
                     st.markdown("#### 📊 업체별 1차 배정 달성 요약")
                     if not summary_df.empty:
                         comp_summary = summary_df[summary_df['거래처명'] != '미분류 (잔여 물량)'].copy()
@@ -200,7 +206,9 @@ if check_password():
                         calc_summary_height = (len(display_summary) + 1) * 35 + 10
                         st.dataframe(display_summary, height=calc_summary_height, use_container_width=True, hide_index=True)
 
-                    # --- 아코디언 1 ---
+                    # ---------------- 아코디언 메뉴 구성 ----------------
+                    
+                    # 1. 1차 배정 내역보기 (맨 위)
                     with st.expander("📋 1차 배정 내역보기(스팩 100% 일치)", expanded=False):
                         today_str = datetime.now().strftime("%Y-%m-%d")
                         summary = pigs.groupby(['배정거래처']).size().reset_index(name='수량')
@@ -224,7 +232,7 @@ if check_password():
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         )
 
-                    # --- 아코디언 2 ---
+                    # 2. 1차 배정 미분류 내역 (중간)
                     if not unallocated_df.empty:
                         with st.expander("⚠️ 1차 배정 미분류 (잔여 물량) 내역 보기", expanded=False):
                             today_str = datetime.now().strftime("%Y-%m-%d")
@@ -241,7 +249,7 @@ if check_password():
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                             )
 
-                    # --- 아코디언 3 ---
+                    # 3. 업체별 세부 배정 조건표 (맨 아래)
                     with st.expander("📋 업체별 세부 배정 조건표 조회 및 엑셀 다운로드", expanded=False):
                         cond_df = get_company_conditions_df()
                         if not cond_df.empty:
