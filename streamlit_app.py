@@ -3,6 +3,21 @@ import pandas as pd
 import io
 from datetime import datetime
 
+# ----------------- 엑셀 위치 지정 로더 (5~6행 헤더, 7행 데이터, I열=중량, J열=등지방) -----------------
+def load_excel_by_coords(file):
+    file.seek(0)
+    # 엑셀의 5~6번째 행(인덱스 4, 5)을 병합 헤더로 지정하고 7번째 행부터 데이터로 판독
+    df = pd.read_excel(file, header=[4, 5])
+    
+    w_col_name = "I열(중량)"
+    f_col_name = "J열(등지방)"
+    
+    # I열(인덱스 8: 중량) & J열(인덱스 9: 등지방) 위치 기반(iloc) 수치 변환
+    df['w_num'] = pd.to_numeric(df.iloc[:, 8], errors='coerce')
+    df['f_num'] = pd.to_numeric(df.iloc[:, 9], errors='coerce')
+    
+    return df, w_col_name, f_col_name
+
 # ----------------- 외부 연동 모듈 불러오기 -----------------
 try:
     from auth import check_password
@@ -76,61 +91,53 @@ if check_password():
             st.subheader("🚀 자동 배정 연산 및 분석")
             
             # -------------------------------------------------------------------------
-            # 1. 등급판정 결과 분석 표 (최상단)
+            # 1. 등급판정 결과 분석 표 (I열, J열 7행 이후 데이터 기준)
             # -------------------------------------------------------------------------
             st.markdown("### 📊 1. 등급판정 결과 데이터 규격 분석")
             
             if uploaded_grade:
                 try:
-                    # 엑셀 파일 읽기 (임시 분석용)
-                    uploaded_grade.seek(0)
-                    df_raw = pd.read_excel(uploaded_grade)
+                    df_raw, w_col_name, f_col_name = load_excel_by_coords(uploaded_grade)
                     
-                    w_col = next((c for c in df_raw.columns if '중량' in c or '도체중' in c or '체중' in c), None)
-                    f_col = next((c for c in df_raw.columns if '등지방' in c or '지방' in c), None)
+                    # 결측치 제외 유효 데이터 처리
+                    df_valid = df_raw.dropna(subset=['w_num', 'f_num'])
                     
-                    if w_col and f_col:
-                        df_raw['w_num'] = pd.to_numeric(df_raw[w_col], errors='coerce')
-                        df_raw['f_num'] = pd.to_numeric(df_raw[f_col], errors='coerce')
-                        
-                        # 조건 1: 마장동 스펙 (중량 85~97kg AND 등지방 18~27mm)
-                        cond1 = (df_raw['w_num'] >= 85) & (df_raw['w_num'] <= 97) & (df_raw['f_num'] >= 18) & (df_raw['f_num'] <= 27)
-                        df_cond1 = df_raw[cond1]
-                        
-                        # 조건 1 제외 물량
-                        df_rem1 = df_raw[~cond1]
-                        
-                        # 조건 2: 두꺼운 지육 (조건 1 제외 중 중량 >= 97kg OR 등지방 >= 27mm)
-                        cond2 = (df_rem1['w_num'] >= 97) | (df_rem1['f_num'] >= 27)
-                        df_cond2 = df_rem1[cond2]
-                        
-                        # 조건 3: 얇은/소형 지육 (조건 1, 2 제외 잔여: 중량 < 85kg OR 등지방 < 18mm)
-                        df_cond3 = df_rem1[~cond2]
-                        
-                        tot_cnt = len(df_raw)
-                        c1_cnt = len(df_cond1)
-                        c2_cnt = len(df_cond2)
-                        c3_cnt = len(df_cond3)
-                        
-                        analysis_table = pd.DataFrame({
-                            "구분": ["1. 마장동 스펙 규격", "2. 두꺼운 지육 (마장동 제외)", "3. 얇은/소형 지육 (잔여 물량)"],
-                            "분류 상세 조건": [
-                                "중량 85kg ~ 97kg  AND  등지방 18mm ~ 27mm",
-                                "중량 97kg 이상  OR  등지방 27mm 이상",
-                                "중량 85kg 미만  OR  등지방 18mm 미만"
-                            ],
-                            "배정가능 두수": [f"{c1_cnt:,} 두", f"{c2_cnt:,} 두", f"{c3_cnt:,} 두"],
-                            "비율 (%)": [
-                                f"{(c1_cnt/tot_cnt*100):.1f}%" if tot_cnt > 0 else "0%",
-                                f"{(c2_cnt/tot_cnt*100):.1f}%" if tot_cnt > 0 else "0%",
-                                f"{(c3_cnt/tot_cnt*100):.1f}%" if tot_cnt > 0 else "0%"
-                            ]
-                        })
-                        
-                        st.table(analysis_table)
-                        st.info(f"💡 **총 입고두수:** {tot_cnt:,}두 (마장동 스펙: {c1_cnt:,}두 / 두꺼운 지육: {c2_cnt:,}두 / 얇은·소형: {c3_cnt:,}두)")
-                    else:
-                        st.warning("⚠️ 엑셀 파일에서 '중량' 및 '등지방' 컬럼을 감지하지 못했습니다.")
+                    # 조건 1: 마장동 스펙 (중량 85~97kg AND 등지방 18~27mm)
+                    cond1 = (df_valid['w_num'] >= 85) & (df_valid['w_num'] <= 97) & (df_valid['f_num'] >= 18) & (df_valid['f_num'] <= 27)
+                    df_cond1 = df_valid[cond1]
+                    
+                    # 조건 1 제외 물량
+                    df_rem1 = df_valid[~cond1]
+                    
+                    # 조건 2: 두꺼운 지육 (조건 1 제외 중 중량 >= 97kg OR 등지방 >= 27mm)
+                    cond2 = (df_rem1['w_num'] >= 97) | (df_rem1['f_num'] >= 27)
+                    df_cond2 = df_rem1[cond2]
+                    
+                    # 조건 3: 얇은/소형 지육 (조건 1, 2 제외 잔여: 중량 < 85kg OR 등지방 < 18mm)
+                    df_cond3 = df_rem1[~cond2]
+                    
+                    tot_cnt = len(df_valid)
+                    c1_cnt = len(df_cond1)
+                    c2_cnt = len(df_cond2)
+                    c3_cnt = len(df_cond3)
+                    
+                    analysis_table = pd.DataFrame({
+                        "구분": ["1. 마장동 스펙 규격", "2. 두꺼운 지육 (마장동 제외)", "3. 얇은/소형 지육 (잔여 물량)"],
+                        "분류 상세 조건": [
+                            "중량 85kg ~ 97kg  AND  등지방 18mm ~ 27mm",
+                            "중량 97kg 이상  OR  등지방 27mm 이상",
+                            "중량 85kg 미만  OR  등지방 18mm 미만"
+                        ],
+                        "배정가능 두수": [f"{c1_cnt:,} 두", f"{c2_cnt:,} 두", f"{c3_cnt:,} 두"],
+                        "비율 (%)": [
+                            f"{(c1_cnt/tot_cnt*100):.1f}%" if tot_cnt > 0 else "0%",
+                            f"{(c2_cnt/tot_cnt*100):.1f}%" if tot_cnt > 0 else "0%",
+                            f"{(c3_cnt/tot_cnt*100):.1f}%" if tot_cnt > 0 else "0%"
+                        ]
+                    })
+                    
+                    st.table(analysis_table)
+                    st.info(f"💡 **분석 좌표:** I7열 이후 중량 / J7열 이후 등지방 | **총 유효 입고두수:** {tot_cnt:,}두 (마장동: {c1_cnt:,}두 / 두꺼운 지육: {c2_cnt:,}두 / 얇은·소형: {c3_cnt:,}두)")
                 except Exception as e:
                     st.error(f"등급판정 파일 분석 중 오류 발생: {e}")
             else:
