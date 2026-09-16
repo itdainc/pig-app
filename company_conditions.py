@@ -1,296 +1,314 @@
 import io
 import pandas as pd
 
-# 이미지 표 기준 1차 배정 조건 데이터 (배정순서 및 중요도)
-COMPANY_CONDITIONS_DATA = [
+# ==============================================================================
+# 업체별 세부 배정 조건 초기 변수 데이터 구조화 (모든 항목 변수화)
+# ==============================================================================
+INITIAL_COMPANY_CONDITIONS = [
     {
-        "배정순서": 1,
-        "거래처": "염주골",
-        "중요도": 5,
-        "목표두수": 20,
-        "암 비율": "100.00%",
-        "지급률": "105.0%",
-        "중량(kg)": "98~109",
-        "등지방(mm)": "20~27",
-        "등급": "2",
-        "하자": "",
-        "w_min": 98,
-        "w_max": 109,
-        "f_min": 20,
-        "f_max": 27,
+        "order": 1,
+        "company": "염주골",
+        "importance": 5,
+        "target_cnt": 20,
+        "female_ratio": "100.00%",
+        "payment_rate": "105.0%",
+        "weight_str": "98~109",
+        "weight_min": 98,
+        "weight_max": 109,
+        "fat_str": "20~27",
+        "fat_min": 20,
+        "fat_max": 27,
+        "grade_str": "2",
         "grades": ["2"],
+        "defect_str": "",
         "no_defect_only": False,
     },
     {
-        "배정순서": 3,
-        "거래처": "프라임미트",
-        "중요도": 4,
-        "목표두수": 110,
-        "암 비율": "70.00%",
-        "지급률": "104.5%",
-        "중량(kg)": "80~103",
-        "등지방(mm)": "20~34",
-        "등급": "1,1+,2",
-        "하자": "",
-        "w_min": 80,
-        "w_max": 103,
-        "f_min": 20,
-        "f_max": 34,
+        "order": 2,
+        "company": "흥부축산",
+        "importance": 5,
+        "target_cnt": 25,
+        "female_ratio": "",
+        "payment_rate": "103.5%",
+        "weight_str": "83~88",
+        "weight_min": 83,
+        "weight_max": 88,
+        "fat_str": "18~22",
+        "fat_min": 18,
+        "fat_max": 22,
+        "grade_str": "1,1+,2",
         "grades": ["1", "1+", "2"],
+        "defect_str": "",
         "no_defect_only": False,
     },
     {
-        "배정순서": 2,
-        "거래처": "흥부축산",
-        "중요도": 5,
-        "목표두수": 25,
-        "암 비율": "",
-        "지급률": "103.5%",
-        "중량(kg)": "83~88",
-        "등지방(mm)": "18~22",
-        "등급": "1,1+,2",
-        "하자": "",
-        "w_min": 83,
-        "w_max": 88,
-        "f_min": 18,
-        "f_max": 22,
+        "order": 3,
+        "company": "프라임미트",
+        "importance": 4,
+        "target_cnt": 110,
+        "female_ratio": "70.00%",
+        "payment_rate": "104.5%",
+        "weight_str": "80~103",
+        "weight_min": 80,
+        "weight_max": 103,
+        "fat_str": "20~34",
+        "fat_min": 20,
+        "fat_max": 34,
+        "grade_str": "1,1+,2",
         "grades": ["1", "1+", "2"],
+        "defect_str": "",
         "no_defect_only": False,
     },
     {
-        "배정순서": 7,
-        "거래처": "자운",
-        "중요도": 2,
-        "목표두수": 15,
-        "암 비율": "100.00%",
-        "지급률": "107.5%",
-        "중량(kg)": "85~95",
-        "등지방(mm)": "22~25",
-        "등급": "1,1+",
-        "하자": "하자 없음",
-        "w_min": 85,
-        "w_max": 95,
-        "f_min": 22,
-        "f_max": 25,
+        "order": 4,
+        "company": "돼랑이",
+        "importance": 4,
+        "target_cnt": 5,
+        "female_ratio": "50.00%",
+        "payment_rate": "105.0%",
+        "weight_str": "85~90",
+        "weight_min": 85,
+        "weight_max": 90,
+        "fat_str": "26~29",
+        "fat_min": 26,
+        "fat_max": 29,
+        "grade_str": "1,1+",
         "grades": ["1", "1+"],
-        "no_defect_only": True,
-    },
-    {
-        "배정순서": 8,
-        "거래처": "승민",
-        "중요도": 2,
-        "목표두수": 5,
-        "암 비율": "100.00%",
-        "지급률": "107.5%",
-        "중량(kg)": "84~88",
-        "등지방(mm)": "20",
-        "등급": "1,1+",
-        "하자": "하자 없음",
-        "w_min": 84,
-        "w_max": 88,
-        "f_min": 20,
-        "f_max": 20,
-        "grades": ["1", "1+"],
-        "no_defect_only": True,
-    },
-    {
-        "배정순서": 6,
-        "거래처": "제이이",
-        "중요도": 2,
-        "목표두수": 15,
-        "암 비율": "100.00%",
-        "지급률": "107.0%",
-        "중량(kg)": "88~97",
-        "등지방(mm)": "25~27",
-        "등급": "1,1+",
-        "하자": "하자 없음",
-        "w_min": 88,
-        "w_max": 97,
-        "f_min": 25,
-        "f_max": 27,
-        "grades": ["1", "1+"],
-        "no_defect_only": True,
-    },
-    {
-        "배정순서": 4,
-        "거래처": "돼랑이",
-        "중요도": 4,
-        "목표두수": 5,
-        "암 비율": "50.00%",
-        "지급률": "105.0%",
-        "중량(kg)": "85~90",
-        "등지방(mm)": "26~29",
-        "등급": "1,1+",
-        "하자": "",
-        "w_min": 85,
-        "w_max": 90,
-        "f_min": 26,
-        "f_max": 29,
-        "grades": ["1", "1+"],
+        "defect_str": "",
         "no_defect_only": False,
     },
     {
-        "배정순서": 5,
-        "거래처": "민강",
-        "중요도": 1,
-        "목표두수": 60,
-        "암 비율": "100.00%",
-        "지급률": "107.0%",
-        "중량(kg)": "85~97",
-        "등지방(mm)": "21~25",
-        "등급": "1,1+",
-        "하자": "하자 없음",
-        "w_min": 85,
-        "w_max": 97,
-        "f_min": 21,
-        "f_max": 25,
+        "order": 5,
+        "company": "민강",
+        "importance": 1,
+        "target_cnt": 60,
+        "female_ratio": "100.00%",
+        "payment_rate": "107.0%",
+        "weight_str": "85~97",
+        "weight_min": 85,
+        "weight_max": 97,
+        "fat_str": "21~25",
+        "fat_min": 21,
+        "fat_max": 25,
+        "grade_str": "1,1+",
         "grades": ["1", "1+"],
+        "defect_str": "하자 없음",
         "no_defect_only": True,
     },
     {
-        "배정순서": 9,
-        "거래처": "대용식품",
-        "중요도": 3,
-        "목표두수": 15,
-        "암 비율": "60.00%",
-        "지급률": "107.0%",
-        "중량(kg)": "85~90",
-        "등지방(mm)": "18~21",
-        "등급": "1,1+",
-        "하자": "하자 없음",
-        "w_min": 85,
-        "w_max": 90,
-        "f_min": 18,
-        "f_max": 21,
+        "order": 6,
+        "company": "제이이",
+        "importance": 2,
+        "target_cnt": 15,
+        "female_ratio": "100.00%",
+        "payment_rate": "107.0%",
+        "weight_str": "88~97",
+        "weight_min": 88,
+        "weight_max": 97,
+        "fat_str": "25~27",
+        "fat_min": 25,
+        "fat_max": 27,
+        "grade_str": "1,1+",
         "grades": ["1", "1+"],
+        "defect_str": "하자 없음",
         "no_defect_only": True,
     },
     {
-        "배정순서": 10,
-        "거래처": "예소야",
-        "중요도": 3,
-        "목표두수": 15,
-        "암 비율": "60.00%",
-        "지급률": "107.0%",
-        "중량(kg)": "85~90",
-        "등지방(mm)": "18~21",
-        "등급": "1,1+",
-        "하자": "하자 없음",
-        "w_min": 85,
-        "w_max": 90,
-        "f_min": 18,
-        "f_max": 21,
+        "order": 7,
+        "company": "자운",
+        "importance": 2,
+        "target_cnt": 15,
+        "female_ratio": "100.00%",
+        "payment_rate": "107.5%",
+        "weight_str": "85~95",
+        "weight_min": 85,
+        "weight_max": 95,
+        "fat_str": "22~25",
+        "fat_min": 22,
+        "fat_max": 25,
+        "grade_str": "1,1+",
         "grades": ["1", "1+"],
+        "defect_str": "하자 없음",
         "no_defect_only": True,
     },
     {
-        "배정순서": 11,
-        "거래처": "명성",
-        "중요도": 3,
-        "목표두수": 4,
-        "암 비율": "80.00%",
-        "지급률": "107.0%",
-        "중량(kg)": "87~97",
-        "등지방(mm)": "20~22",
-        "등급": "1,1+",
-        "하자": "하자 없음",
-        "w_min": 87,
-        "w_max": 97,
-        "f_min": 20,
-        "f_max": 22,
+        "order": 8,
+        "company": "승민",
+        "importance": 2,
+        "target_cnt": 5,
+        "female_ratio": "100.00%",
+        "payment_rate": "107.5%",
+        "weight_str": "84~88",
+        "weight_min": 84,
+        "weight_max": 88,
+        "fat_str": "20",
+        "fat_min": 20,
+        "fat_max": 20,
+        "grade_str": "1,1+",
         "grades": ["1", "1+"],
+        "defect_str": "하자 없음",
         "no_defect_only": True,
     },
     {
-        "배정순서": 12,
-        "거래처": "미소",
-        "중요도": 4,
-        "목표두수": 60,
-        "암 비율": "60.00%",
-        "지급률": "105.0%",
-        "중량(kg)": "85~97",
-        "등지방(mm)": "17~27",
-        "등급": "1,1+",
-        "하자": "",
-        "w_min": 85,
-        "w_max": 97,
-        "f_min": 17,
-        "f_max": 27,
+        "order": 9,
+        "company": "대용식품",
+        "importance": 3,
+        "target_cnt": 15,
+        "female_ratio": "60.00%",
+        "payment_rate": "107.0%",
+        "weight_str": "85~90",
+        "weight_min": 85,
+        "weight_max": 90,
+        "fat_str": "18~21",
+        "fat_min": 18,
+        "fat_max": 21,
+        "grade_str": "1,1+",
         "grades": ["1", "1+"],
+        "defect_str": "하자 없음",
+        "no_defect_only": True,
+    },
+    {
+        "order": 10,
+        "company": "예소야",
+        "importance": 3,
+        "target_cnt": 15,
+        "female_ratio": "60.00%",
+        "payment_rate": "107.0%",
+        "weight_str": "85~90",
+        "weight_min": 85,
+        "weight_max": 90,
+        "fat_str": "18~21",
+        "fat_min": 18,
+        "fat_max": 21,
+        "grade_str": "1,1+",
+        "grades": ["1", "1+"],
+        "defect_str": "하자 없음",
+        "no_defect_only": True,
+    },
+    {
+        "order": 11,
+        "company": "명성",
+        "importance": 3,
+        "target_cnt": 4,
+        "female_ratio": "80.00%",
+        "payment_rate": "107.0%",
+        "weight_str": "87~97",
+        "weight_min": 87,
+        "weight_max": 97,
+        "fat_str": "20~22",
+        "fat_min": 20,
+        "fat_max": 22,
+        "grade_str": "1,1+",
+        "grades": ["1", "1+"],
+        "defect_str": "하자 없음",
+        "no_defect_only": True,
+    },
+    {
+        "order": 12,
+        "company": "미소",
+        "importance": 4,
+        "target_cnt": 60,
+        "female_ratio": "60.00%",
+        "payment_rate": "105.0%",
+        "weight_str": "85~97",
+        "weight_min": 85,
+        "weight_max": 97,
+        "fat_str": "17~27",
+        "fat_min": 17,
+        "fat_max": 27,
+        "grade_str": "1,1+",
+        "grades": ["1", "1+"],
+        "defect_str": "",
         "no_defect_only": False,
     },
 ]
 
-def get_company_conditions_df():
-  """조회용 데이터프레임 반환"""
-  df = pd.DataFrame(COMPANY_CONDITIONS_DATA)
-  cols = [
-      "배정순서",
-      "거래처",
-      "중요도",
-      "목표두수",
-      "암 비율",
-      "지급률",
-      "중량(kg)",
-      "등지방(mm)",
-      "등급",
-      "하자",
-  ]
-  return df[cols]
 
-def get_company_conditions_excel_bytes():
-  """엑셀 다운로드 파일 반환"""
-  df = get_company_conditions_df()
+def get_company_conditions_df(conditions_list=None):
+  """화면 출력 및 조건표 생성 함수"""
+  target_list = (
+      conditions_list if conditions_list is not None else INITIAL_COMPANY_CONDITIONS
+  )
+
+  rows = []
+  for item in target_list:
+    rows.append({
+        "배정순서": item["order"],
+        "거래처": item["company"],
+        "중요도": item["importance"],
+        "목표두수": item["target_cnt"],
+        "암 비율": item["female_ratio"],
+        "지급률": item["payment_rate"],
+        "중량(kg)": item["weight_str"],
+        "등지방(mm)": item["fat_str"],
+        "등급": item["grade_str"],
+        "하자": item["defect_str"],
+    })
+  return pd.DataFrame(rows)
+
+
+def get_company_conditions_excel_bytes(conditions_list=None):
+  """배정 조건표 엑셀 다운로드 파일 반환 함수"""
+  df = get_company_conditions_df(conditions_list)
   output = io.BytesIO()
   with pd.ExcelWriter(output, engine="openpyxl") as writer:
     df.to_excel(writer, sheet_name="1차배정조건표", index=False)
   return output.getvalue()
 
+
 def run_100pct_strict_allocation(df_valid, custom_targets=None):
-  """1차 배정 핵심 연산
-  :param custom_targets: 화면에서 수정된 목표두수 딕셔너리 (예: {"염주골": 25, ...})
-  """
+  """변수 기반 1차 100% 스펙 일치 자동 배정 연산 로직"""
   pigs = df_valid.copy()
-  pigs["배정거래처"] = "미분류"  
+  pigs["배정거래처"] = "미분류"
 
   summary_rows = []
 
+  # 배정순서 오름차순, 동일 시 중요도 내림차순 정렬
   sorted_specs = sorted(
-      COMPANY_CONDITIONS_DATA, key=lambda x: (x["배정순서"], -x["중요도"])
+      INITIAL_COMPANY_CONDITIONS, key=lambda x: (x["order"], -x["importance"])
   )
 
   for spec in sorted_specs:
-    comp_name = spec["거래처"]
-    
-    # 전달받은 커스텀 목표두수가 있으면 우선 적용, 없으면 기본값 적용
+    comp_name = spec["company"]
+
+    # 동적 수정된 목표두수가 넘어올 경우 변수값 덮어쓰기
     if custom_targets is not None and comp_name in custom_targets:
-        target_cnt = int(custom_targets[comp_name])
+      target_cnt = int(custom_targets[comp_name])
     else:
-        target_cnt = spec["목표두수"]
+      target_cnt = spec["target_cnt"]
 
     unassigned_mask = pigs["배정거래처"] == "미분류"
 
-    cond_weight = (pigs["w_num"] >= spec["w_min"]) & (pigs["w_num"] <= spec["w_max"])
-    cond_fat = (pigs["f_num"] >= spec["f_min"]) & (pigs["f_num"] <= spec["f_max"])
+    # 변수화된 조건 수치 매칭 (중량, 등지방, 등급, 하자)
+    cond_weight = (pigs["w_num"] >= spec["weight_min"]) & (
+        pigs["w_num"] <= spec["weight_max"]
+    )
+    cond_fat = (pigs["f_num"] >= spec["fat_min"]) & (
+        pigs["f_num"] <= spec["fat_max"]
+    )
     cond_grade = pigs["grade_str"].isin(spec["grades"])
 
     if spec["no_defect_only"]:
       cond_defect = pigs["no_defect"] == True
-      strict_mask = unassigned_mask & cond_weight & cond_fat & cond_grade & cond_defect
+      strict_mask = (
+          unassigned_mask & cond_weight & cond_fat & cond_grade & cond_defect
+      )
     else:
       strict_mask = unassigned_mask & cond_weight & cond_fat & cond_grade
 
     matched_indices = pigs[strict_mask].index
 
-    # 목표두수 한도 내 선착순 할당
+    # 목표두수 한도 내 할당
     allocated_indices = matched_indices[:target_cnt]
     pigs.loc[allocated_indices, "배정거래처"] = comp_name
 
     allocated_cnt = len(allocated_indices)
-    achieve_rate = f"{(allocated_cnt / target_cnt * 100):.1f}%" if target_cnt > 0 else "-"
+    achieve_rate = (
+        f"{(allocated_cnt / target_cnt * 100):.1f}%" if target_cnt > 0 else "-"
+    )
 
     summary_rows.append({
-        "배정순서": spec["배정순서"],
+        "배정순서": spec["order"],
         "거래처명": comp_name,
         "목표두수": target_cnt,
         "1차 배정두수": allocated_cnt,
