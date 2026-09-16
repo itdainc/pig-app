@@ -244,7 +244,6 @@ if check_password():
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         )
 
-                    # 💡 2. 1차 배정 미분류 내역 (표 가독성 정제 적용)
                     if not unallocated_df.empty:
                         with st.expander("⚠️ 1차 배정 미분류 (잔여 물량) 내역 보기", expanded=False):
                             today_str = datetime.now().strftime("%Y-%m-%d")
@@ -292,7 +291,13 @@ if check_password():
                     selected_company = st.selectbox("👉 조회할 거래처를 선택하세요:", sorted(all_assigned))
                     st.markdown(f"### **[{selected_company}] 배정 명단**")
                     comp_df = pigs_all[pigs_all['배정거래처'] == selected_company].copy()
-                    st.dataframe(comp_df, use_container_width=True)
+                    
+                    # 💡 거래처별 명단표 컬럼 정제 및 가독성 개선
+                    display_comp_df = comp_df[[8, 9, 22, 'w_num', 'f_num', 'grade_str', '배정거래처']].copy()
+                    display_comp_df.columns = ['도체번호', '중량(원본)', '등지방(원본)', '중량(숫자)', '등지방(숫자)', '등급', '배정거래처']
+                    calc_comp_height = (len(display_comp_df) + 1) * 35 + 10
+                    
+                    st.dataframe(display_comp_df, height=calc_comp_height, use_container_width=True)
             else:
                 st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
 
@@ -301,7 +306,13 @@ if check_password():
             st.subheader("🚚 잇다 배정 내역 (미분류)")
             if 'allocated_pigs' in st.session_state and '배정거래처' in st.session_state['allocated_pigs'].columns:
                 pigs_all = st.session_state['allocated_pigs']
-                st.dataframe(pigs_all[pigs_all['배정거래처'] == '미분류'], use_container_width=True)
+                unassigned_df_tab3 = pigs_all[pigs_all['배정거래처'] == '미분류'].copy()
+                
+                if not unassigned_df_tab3.empty:
+                    display_tab3_df = unassigned_df_tab3[[8, 9, 22, 'w_num', 'f_num', 'grade_str', '배정거래처']].copy()
+                    display_tab3_df.columns = ['도체번호', '중량(원본)', '등지방(원본)', '중량(숫자)', '등지방(숫자)', '등급', '배정거래처']
+                    calc_tab3_height = (len(display_tab3_df) + 1) * 35 + 10
+                    st.dataframe(display_tab3_df, height=calc_tab3_height, use_container_width=True)
             else:
                 st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
 
