@@ -28,25 +28,6 @@ except ImportError:
         df['배정거래처'] = '미분류'
         return df, pd.DataFrame(), pd.DataFrame()
 
-# ----------------- 개체별 지육율 및 생체중 추정 함수 -----------------
-def calc_pig_dressing_rate(weight, sex):
-    if weight < 78:
-        base_rate = 75.2
-    elif weight < 82:
-        base_rate = 75.8
-    elif weight < 86:
-        base_rate = 76.4
-    elif weight < 90:
-        base_rate = 77.0
-    elif weight < 95:
-        base_rate = 77.5
-    else:
-        base_rate = 78.0
-        
-    if str(sex).strip() == '거세':
-        base_rate += 0.2
-    return base_rate
-
 # ----------------- 엑셀 위치 지정 로더 (7행부터 데이터 시작) -----------------
 def load_excel_by_coords(file):
     file.seek(0)
@@ -68,10 +49,6 @@ def load_excel_by_coords(file):
     raw_farm = df.iloc[:, farm_col_idx].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
     raw_farm = raw_farm.replace(['nan', 'None', '0', ''], '-')
     df['farm_name'] = raw_farm.apply(get_farm_with_feed)
-
-    # 개체별 지육율 및 생체중 파생변수 생성
-    df['pig_dressing_rate'] = df.apply(lambda r: calc_pig_dressing_rate(r['w_num'], r['sex_str']), axis=1)
-    df['pig_live_weight'] = df['w_num'] / (df['pig_dressing_rate'] / 100.0)
 
     def check_no_defect(row_slice):
         for val in row_slice:
@@ -132,7 +109,7 @@ if check_password():
 
     # 💡 시스템 초기화 (메모리 리프레쉬) 버튼
     if st.sidebar.button("🔄 시스템 초기화", use_container_width=True):
-        keys_to_clear = ['target_df', 'allocated_pigs']
+        keys_to_clear = ['target_df', 'allocated_pigs', 'farm_live_weights']
         for key in keys_to_clear:
             if key in st.session_state:
                 del st.session_state[key]
@@ -216,7 +193,6 @@ if check_password():
             st.markdown("### ✏️ 2. 거래처별 세부 배정 조건 수정 및 변경")
             st.info("💡 거래처별 **목표두수, 중량, 등지방, 등급, 하자, 배제농가** 항목을 직접 수정하고 하단 버튼을 누르면 배정 연산에 즉시 반영됩니다.")
             
-            # 동적 높이 계산 (공란 없이 행 수에 맞춤)
             calc_target_editor_height = (len(st.session_state.target_df) + 1) * 35 + 5
             
             edited_target_df = st.data_editor(
@@ -277,9 +253,7 @@ if check_password():
                             return [''] * len(row)
 
                         styled_summary = display_summary.style.apply(highlight_shortage, axis=1)
-                        # 공란 없이 달성요약표 높이 정확히 계산
                         calc_summary_height = (len(display_summary) + 1) * 35 + 5
-                        
                         st.dataframe(styled_summary, height=calc_summary_height, use_container_width=True, hide_index=True)
 
                     # ---------------- 아코디언 메뉴 ----------------
@@ -293,10 +267,9 @@ if check_password():
                             summary.to_excel(writer, sheet_name='요약')
                         processed_data = output.getvalue()
                         
-                        # 도체번호(pig_no), 중량, 등지방, 등급 표출 및 인덱스 1부터 부여
                         display_df = pigs[['pig_no', 'w_num', 'f_num', 'grade_str', '배정거래처']].copy()
                         display_df.columns = ['도체번호', '중량', '등지방', '등급', '배정거래처']
-                        display_df.index = range(1, len(display_df) + 1)  # 순번 1부터 시작!
+                        display_df.index = range(1, len(display_df) + 1)
                         
                         calc_height = min(800, (len(display_df) + 1) * 35 + 5)
                         st.dataframe(display_df, height=calc_height, use_container_width=True)
@@ -317,7 +290,7 @@ if check_password():
                             
                             display_unalloc_df = unallocated_df[['pig_no', 'w_num', 'f_num', 'grade_str', '배정거래처']].copy()
                             display_unalloc_df.columns = ['도체번호', '중량', '등지방', '등급', '배정거래처']
-                            display_unalloc_df.index = range(1, len(display_unalloc_df) + 1)  # 순번 1부터 시작!
+                            display_unalloc_df.index = range(1, len(display_unalloc_df) + 1)
                             
                             calc_unalloc_height = min(800, (len(display_unalloc_df) + 1) * 35 + 5)
                             st.dataframe(display_unalloc_df, height=calc_unalloc_height, use_container_width=True)
@@ -359,7 +332,7 @@ if check_password():
                     
                     display_comp_df = comp_df[['pig_no', 'w_num', 'f_num', 'grade_str', '배정거래처']].copy()
                     display_comp_df.columns = ['도체번호', '중량', '등지방', '등급', '배정거래처']
-                    display_comp_df.index = range(1, len(display_comp_df) + 1)  # 순번 1부터 시작!
+                    display_comp_df.index = range(1, len(display_comp_df) + 1)
                     
                     calc_comp_height = min(800, (len(display_comp_df) + 1) * 35 + 5)
                     st.dataframe(display_comp_df, height=calc_comp_height, use_container_width=True)
@@ -376,7 +349,7 @@ if check_password():
                 if not unassigned_df_tab3.empty:
                     display_tab3_df = unassigned_df_tab3[['pig_no', 'w_num', 'f_num', 'grade_str', '배정거래처']].copy()
                     display_tab3_df.columns = ['도체번호', '중량', '등지방', '등급', '배정거래처']
-                    display_tab3_df.index = range(1, len(display_tab3_df) + 1)  # 순번 1부터 시작!
+                    display_tab3_df.index = range(1, len(display_tab3_df) + 1)
                     
                     calc_tab3_height = min(800, (len(display_tab3_df) + 1) * 35 + 5)
                     st.dataframe(display_tab3_df, height=calc_tab3_height, use_container_width=True)
@@ -399,12 +372,45 @@ if check_password():
                     return parts[1].strip(), parts[0].strip()
                 return s_val, '-'
 
-            # 농가명 정밀 파싱
             if 'farm_name' in pigs_all.columns:
                 pigs_all[['농가_명', '사료사_명']] = pigs_all['farm_name'].apply(lambda x: pd.Series(extract_feed_and_farm(x)))
             else:
                 pigs_all['농가_명'] = '-'
                 pigs_all['사료사_명'] = '-'
+
+            farm_list = sorted(list(pigs_all['농가_명'].unique()))
+
+            # 농가별 수기 입력 총생체중(kg) 세션 관리
+            if 'farm_live_weights' not in st.session_state:
+                st.session_state.farm_live_weights = {f: 0 for f in farm_list}
+
+            st.markdown("### ✏️ 농가별 실제 출하 총생체중(kg) 수기 입력")
+            with st.expander("💡 농가별 실제 총생체중(kg) 입력하기 (클릭하여 열기)", expanded=False):
+                st.info("💡 구글 시트 등의 농가별 실제 총생체중(kg)을 입력하면, 지육율과 생체평균이 100% 정밀하게 즉시 계산됩니다.")
+                
+                live_input_df = pd.DataFrame([
+                    {"농가": f, "실제 총생체중(kg)": st.session_state.farm_live_weights.get(f, 0)}
+                    for f in farm_list if f != '-'
+                ])
+                
+                edited_live_df = st.data_editor(
+                    live_input_df,
+                    height=(len(live_input_df) + 1) * 35 + 5,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "농가": st.column_config.Column("농가명", disabled=True),
+                        "실제 총생체중(kg)": st.column_config.NumberColumn("실제 총생체중(kg)", min_value=0, step=1)
+                    }
+                )
+                
+                if st.button("💾 생체중 입력값 적용", type="secondary", use_container_width=True):
+                    for idx, r in edited_live_df.iterrows():
+                        st.session_state.farm_live_weights[r['농가']] = r['실제 총생체중(kg)']
+                    st.success("✅ 실제 총생체중이 적용되어 아래 표에 100% 정밀 연산되었습니다!")
+                    st.rerun()
+
+            st.markdown("---")
 
             farm_groups = pigs_all.groupby(['농가_명', '사료사_명'])
             
@@ -413,13 +419,18 @@ if check_password():
                 head_cnt = len(group)
                 total_weight = group['w_num'].sum()
                 
-                # 개체별 연산 기반 생체중 합산
-                if 'pig_live_weight' in group.columns:
-                    live_weight = group['pig_live_weight'].sum()
+                # 수기 입력받은 농가별 실제 총생체중 사용
+                user_live_w = st.session_state.farm_live_weights.get(farm_name, 0)
+                
+                if user_live_w > 0:
+                    str_live_weight = f"{int(round(user_live_w)):,}"
+                    str_avg_live = f"{(user_live_w / head_cnt):.2f}"
+                    real_dressing_rate = (total_weight / user_live_w * 100)
+                    str_dressing_rate = f"{real_dressing_rate:.2f}%"
                 else:
-                    live_weight = total_weight / (76.32 / 100.0)
-                    
-                real_dressing_rate = (total_weight / live_weight * 100) if live_weight > 0 else 0.0
+                    str_live_weight = "-"
+                    str_avg_live = "-"
+                    str_dressing_rate = "-"
 
                 spec_target = group[(group['w_num'] >= 86) & (group['w_num'] <= 96) & (group['f_num'] >= 19) & (group['f_num'] <= 23)]
                 spec_target_cnt = len(spec_target)
@@ -430,12 +441,12 @@ if check_password():
 
                 rows.append({
                     '농가': farm_name, '사료사': feed_name, '두수': f"{head_cnt:,}", '중량': f"{int(round(total_weight)):,}",
-                    '생체': f"{int(round(live_weight)):,}", '생체평균': f"{(live_weight / head_cnt):.2f}" if head_cnt > 0 else "0.00",
+                    '생체': str_live_weight, '생체평균': str_avg_live,
                     '도체 kg': f"{(total_weight / head_cnt):.1f}" if head_cnt > 0 else "0.0", '등지방 mm': f"{group['f_num'].mean():.1f}",
-                    '지육율': f"{real_dressing_rate:.2f}%", '86~96,19~23': f"{spec_target_cnt:,}", '스펙비율': f"{(spec_target_cnt / head_cnt * 100):.1f}%" if head_cnt > 0 else "0.0%",
-                    '1+': f"{cnt_1plus:,}", '1+ 중량': f"{int(round(group[group['grade_str'] == '1+']['w_num'].sum())):,}",
-                    '1': f"{cnt_1:,}", '1 중량': f"{int(round(group[group['grade_str'] == '1']['w_num'].sum())):,}",
-                    '2': f"{cnt_2:,}", '2 중량': f"{int(round(group[group['grade_str'] == '2']['w_num'].sum())):,}",
+                    '지육율': str_dressing_rate, '86~96,19~23': f"{spec_target_cnt:,}", '스펙비율': f"{(spec_target_cnt / head_cnt * 100):.1f}%" if head_cnt > 0 else "0.0%",
+                    '1+ 두수': f"{cnt_1plus:,}",
+                    '1 두수': f"{cnt_1:,}",
+                    '2 두수': f"{cnt_2:,}",
                     '1+,1 비율': f"{((cnt_1plus + cnt_1) / head_cnt * 100):.2f}%" if head_cnt > 0 else "0.00%"
                 })
 
@@ -443,21 +454,26 @@ if check_password():
             total_head = len(pigs_all)
             total_w = pigs_all['w_num'].sum()
             
-            if 'pig_live_weight' in pigs_all.columns:
-                total_live = pigs_all['pig_live_weight'].sum()
+            tot_user_live = sum(st.session_state.farm_live_weights.values())
+            if tot_user_live > 0:
+                tot_live_str = f"{int(round(tot_user_live)):,}"
+                tot_avg_live_str = f"{(tot_user_live / total_head):.2f}"
+                tot_dressing_str = f"{(total_w / tot_user_live * 100):.2f}%"
             else:
-                total_live = total_w / (76.32 / 100.0)
+                tot_live_str = "-"
+                tot_avg_live_str = "-"
+                tot_dressing_str = "-"
 
             sum_row = pd.DataFrame([{
                 '농가': '합계', '사료사': '-', '두수': f"{total_head:,}", '중량': f"{int(round(total_w)):,}",
-                '생체': f"{int(round(total_live)):,}", '생체평균': f"{(total_live / total_head):.2f}" if total_head > 0 else "0.00",
+                '생체': tot_live_str, '생체평균': tot_avg_live_str,
                 '도체 kg': f"{(total_w / total_head):.1f}" if total_head > 0 else "0.0", '등지방 mm': f"{pigs_all['f_num'].mean():.1f}",
-                '지육율': f"{(total_w / total_live * 100):.2f}%" if total_live > 0 else "0.00%",
+                '지육율': tot_dressing_str,
                 '86~96,19~23': f"{len(pigs_all[(pigs_all['w_num'] >= 86) & (pigs_all['w_num'] <= 96) & (pigs_all['f_num'] >= 19) & (pigs_all['f_num'] <= 23)]):,}",
                 '스펙비율': f"{(len(pigs_all[(pigs_all['w_num'] >= 86) & (pigs_all['w_num'] <= 96) & (pigs_all['f_num'] >= 19) & (pigs_all['f_num'] <= 23)]) / total_head * 100):.1f}%" if total_head > 0 else "0.0%",
-                '1+': f"{len(pigs_all[pigs_all['grade_str'] == '1+']):,}", '1+ 중량': f"{int(round(pigs_all[pigs_all['grade_str'] == '1+']['w_num'].sum())):,}",
-                '1': f"{len(pigs_all[pigs_all['grade_str'] == '1']):,}", '1 중량': f"{int(round(pigs_all[pigs_all['grade_str'] == '1']['w_num'].sum())):,}",
-                '2': f"{len(pigs_all[pigs_all['grade_str'] == '2']):,}", '2 중량': f"{int(round(pigs_all[pigs_all['grade_str'] == '2']['w_num'].sum())):,}",
+                '1+ 두수': f"{len(pigs_all[pigs_all['grade_str'] == '1+']):,}",
+                '1 두수': f"{len(pigs_all[pigs_all['grade_str'] == '1']):,}",
+                '2 두수': f"{len(pigs_all[pigs_all['grade_str'] == '2']):,}",
                 '1+,1 비율': f"{((len(pigs_all[pigs_all['grade_str'] == '1+']) + len(pigs_all[pigs_all['grade_str'] == '1'])) / total_head * 100):.2f}%" if total_head > 0 else "0.00%"
             }])
 
@@ -471,7 +487,8 @@ if check_password():
             
             styled_df = final_analysis_df.style.apply(lambda row: ['font-weight: bold; background-color: #f1f3f5;'] * len(row) if row['농가'] == '합계' else [''] * len(row), axis=1)
             
-            calc_height = min(800, (len(final_analysis_df) + 1) * 35 + 5)
+            # 농가분석 표 공란 없이 행 수에 맞춰 높이 지정
+            calc_height = (len(final_analysis_df) + 1) * 35 + 5
             st.dataframe(styled_df, height=calc_height, use_container_width=True, hide_index=True)
         else:
             st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드하시면 농가 분석 결과가 즉시 생성됩니다.")
