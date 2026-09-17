@@ -357,7 +357,7 @@ if check_password():
                 st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
 
     # ==============================================================================
-    # [메뉴 2] 농가 분석
+    # [메뉴 2] 농가 분석 (컴팩트한 생체중 수기 입력 레이아웃)
     # ==============================================================================
     elif st.session_state.main_menu == "농가분석":
         st.title("📊 농가별 출하 및 스펙 분석")
@@ -385,8 +385,12 @@ if check_password():
                 st.session_state.farm_live_weights = {f: 0 for f in farm_list}
 
             st.markdown("### ✏️ 농가별 실제 출하 총생체중(kg) 수기 입력")
-            with st.expander("💡 농가별 실제 총생체중(kg) 입력하기 (클릭하여 열기)", expanded=False):
-                st.info("💡 구글 시트 등의 농가별 실제 총생체중(kg)을 입력하면, 지육율과 생체평균이 100% 정밀하게 즉시 계산됩니다.")
+            
+            # 컴팩트한 컬럼 구성 (좌측: 설명 및 입력표, 우측: 여백)
+            col_live_left, _ = st.columns([1, 1])
+            
+            with col_live_left:
+                st.caption("💡 구글 시트 등의 농가별 실제 총생체중(kg)을 입력하면, 지육율과 생체평균이 100% 정밀 연산됩니다.")
                 
                 live_input_df = pd.DataFrame([
                     {"농가": f, "실제 총생체중(kg)": st.session_state.farm_live_weights.get(f, 0)}
@@ -407,7 +411,7 @@ if check_password():
                 if st.button("💾 생체중 입력값 적용", type="secondary", use_container_width=True):
                     for idx, r in edited_live_df.iterrows():
                         st.session_state.farm_live_weights[r['농가']] = r['실제 총생체중(kg)']
-                    st.success("✅ 실제 총생체중이 적용되어 아래 표에 100% 정밀 연산되었습니다!")
+                    st.success("✅ 실제 총생체중이 적용되어 아래 표에 정밀 연산되었습니다!")
                     st.rerun()
 
             st.markdown("---")
@@ -487,7 +491,6 @@ if check_password():
             
             styled_df = final_analysis_df.style.apply(lambda row: ['font-weight: bold; background-color: #f1f3f5;'] * len(row) if row['농가'] == '합계' else [''] * len(row), axis=1)
             
-            # 농가분석 표 공란 없이 행 수에 맞춰 높이 지정
             calc_height = (len(final_analysis_df) + 1) * 35 + 5
             st.dataframe(styled_df, height=calc_height, use_container_width=True, hide_index=True)
         else:
