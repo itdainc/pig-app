@@ -63,6 +63,62 @@ def load_excel_by_coords(file):
     
     return df
 
+# 📌 요청하신 15개 심플 컬럼 엑셀 포맷 정제 함수
+def prepare_custom_export_df(df_input):
+    export = pd.DataFrame()
+    export['일련번호'] = range(1, len(df_input) + 1)
+    
+    # 1번 열: 작업장명
+    export['작업장명'] = df_input.iloc[:, 1].astype(str).str.strip() if 1 in df_input.columns else '농협나주'
+    
+    # 3번 열: 판정일자 (월, 일 분리)
+    month_list, day_list = [], []
+    if 3 in df_input.columns:
+        for d in df_input.iloc[:, 3].astype(str).str.strip():
+            d_clean = str(d).replace('-', '').replace('.', '')
+            if len(d_clean) == 4 and d_clean.isdigit():
+                m, day = int(d_clean[:2]), int(d_clean[2:])
+            elif len(d_clean) == 8 and d_clean.isdigit():
+                m, day = int(d_clean[4:6]), int(d_clean[6:8])
+            else:
+                m, day = datetime.now().month, datetime.now().day
+            month_list.append(m)
+            day_list.append(day)
+    else:
+        month_list = [datetime.now().month] * len(df_input)
+        day_list = [datetime.now().day] * len(df_input)
+        
+    export['판정 월'] = month_list
+    export['판정 일'] = day_list
+    
+    # 도체번호
+    export['도체번호'] = df_input['pig_no'] if 'pig_no' in df_input.columns else df_input.iloc[:, 4]
+    
+    # 판정방법, 도체형태, 성별
+    export['판정방법'] = df_input.iloc[:, 5].astype(str).str.strip() if 5 in df_input.columns else '온'
+    export['도체형태'] = df_input.iloc[:, 6].astype(str).str.strip() if 6 in df_input.columns else '탕박'
+    export['성별'] = df_input['sex_str'] if 'sex_str' in df_input.columns else df_input.iloc[:, 7]
+    
+    # 도체중, 등지방, 최종등급
+    export['도체중(kg)'] = df_input['w_num'] if 'w_num' in df_input.columns else df_input.iloc[:, 8]
+    export['등지방두께(mm)'] = df_input['f_num'] if 'f_num' in df_input.columns else df_input.iloc[:, 9]
+    export['최종등급'] = df_input['grade_str'] if 'grade_str' in df_input.columns else df_input.iloc[:, 22]
+    
+    # 출하농가
+    export['출하농가'] = df_input['farm_name'] if 'farm_name' in df_input.columns else df_input.iloc[:, 35]
+    
+    # 이력번호
+    if 36 in df_input.columns:
+        export['이력번호'] = df_input.iloc[:, 36].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+    else:
+        export['이력번호'] = ''
+        
+    # 거래처, 비고
+    export['거래처'] = df_input['배정거래처'] if '배정거래처' in df_input.columns else '미분류'
+    export['비고'] = ''
+    
+    return export
+
 # 로그인 검증
 if check_password():
 
@@ -261,10 +317,13 @@ if check_password():
                         today_str = datetime.now().strftime("%Y-%m-%d")
                         summary = pigs.groupby(['배정거래처']).size().reset_index(name='수량')
 
+                        # 요청하신 이미지 포맷 15개 열로 엑셀 변환
+                        export_pigs = prepare_custom_export_df(pigs)
+                        
                         output = io.BytesIO()
                         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                            pigs.to_excel(writer, sheet_name='전체배정내역')
-                            summary.to_excel(writer, sheet_name='요약')
+                            export_pigs.to_excel(writer, sheet_name='전체배정내역', index=False)
+                            summary.to_excel(writer, sheet_name='요약', index=False)
                         processed_data = output.getvalue()
                         
                         display_df = pigs[['pig_no', 'w_num', 'f_num', 'grade_str', '배정거래처']].copy()
@@ -284,9 +343,13 @@ if check_password():
                     if not unallocated_df.empty:
                         with st.expander("⚠️ 1차 배정 미분류 (잔여 물량) 내역 보기", expanded=False):
                             today_str = datetime.now().strftime("%Y-%m-%d")
+                            
+                            # 요청하신 이미지 포맷 15개 열로 엑셀 변환
+                            export_unalloc = prepare_custom_export_df(unallocated_df)
+                            
                             output_unalloc = io.BytesIO()
                             with pd.ExcelWriter(output_unalloc, engine='openpyxl') as writer:
-                                unallocated_df.to_excel(writer, sheet_name='1차_미분류내역', index=False)
+                                export_unalloc.to_excel(writer, sheet_name='1차_미분류내역', index=False)
                             
                             display_unalloc_df = unallocated_df[['pig_no', 'w_num', 'f_num', 'grade_str', '배정거래처']].copy()
                             display_unalloc_df.columns = ['도체번호', '중량', '등지방', '등급', '배정거래처']
@@ -386,7 +449,6 @@ if check_password():
 
             st.markdown("### ✏️ 농가별 실제 출하 총생체중(kg) 수기 입력")
             
-            # 컴팩트한 컬럼 구성 (좌측: 설명 및 입력표, 우측: 여백)
             col_live_left, _ = st.columns([1, 1])
             
             with col_live_left:
@@ -423,7 +485,6 @@ if check_password():
                 head_cnt = len(group)
                 total_weight = group['w_num'].sum()
                 
-                # 수기 입력받은 농가별 실제 총생체중 사용
                 user_live_w = st.session_state.farm_live_weights.get(farm_name, 0)
                 
                 if user_live_w > 0:
@@ -493,5 +554,3 @@ if check_password():
             
             calc_height = (len(final_analysis_df) + 1) * 35 + 5
             st.dataframe(styled_df, height=calc_height, use_container_width=True, hide_index=True)
-        else:
-            st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드하시면 농가 분석 결과가 즉시 생성됩니다.")
