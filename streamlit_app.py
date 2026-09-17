@@ -10,6 +10,12 @@ except ImportError:
     def check_password(): return True
 
 try:
+    from farm_data import get_farm_with_feed
+except ImportError:
+    def get_farm_with_feed(farm_name):
+        return str(farm_name).strip() if pd.notna(farm_name) else ''
+
+try:
     from company_conditions import (
         get_company_conditions_df,
         get_company_conditions_excel_bytes,
@@ -22,13 +28,31 @@ except ImportError:
         df['배정거래처'] = '미분류'
         return df, pd.DataFrame(), pd.DataFrame()
 
+# ----------------- 개체별 지육율 및 생체중 추정 함수 -----------------
+def calc_pig_dressing_rate(weight, sex):
+    if weight < 78:
+        base_rate = 75.2
+    elif weight < 82:
+        base_rate = 75.8
+    elif weight < 86:
+        base_rate = 76.4
+    elif weight < 90:
+        base_rate = 77.0
+    elif weight < 95:
+        base_rate = 77.5
+    else:
+        base_rate = 78.0
+        
+    if str(sex).strip() == '거세':
+        base_rate += 0.2
+    return base_rate
+
 # ----------------- 엑셀 위치 지정 로더 (7행부터 데이터 시작) -----------------
 def load_excel_by_coords(file):
     file.seek(0)
     df = pd.read_excel(file, skiprows=6, header=None)
 
-    # 주요 컬럼 고정 위치 파싱
-    # 1번 열: 일련번호/작업순번, 4번 열: 실제 도체번호
+    # 4번 열: 실제 도체번호 (5201, 5202...)
     if df.shape[1] > 4:
         df['pig_no'] = pd.to_numeric(df.iloc[:, 4], errors='coerce').fillna(df.iloc[:, 1]).astype(int)
     else:
@@ -36,18 +60,18 @@ def load_excel_by_coords(file):
 
     df['w_num'] = pd.to_numeric(df.iloc[:, 8], errors='coerce')  # 도체중
     df['f_num'] = pd.to_numeric(df.iloc[:, 9], errors='coerce')  # 등지방
+    df['sex_str'] = df.iloc[:, 7].astype(str).str.strip()       # 성별
     df['grade_str'] = df.iloc[:, 22].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
 
-    # 생체중 (엑셀 7번 열에 수치가 있을 경우 활용, 없으면 NaN)
-    if df.shape[1] > 7:
-        df['live_w_num'] = pd.to_numeric(df.iloc[:, 7], errors='coerce')
-    else:
-        df['live_w_num'] = pd.NA
+    # 35번 열 (출하자명 / 농가)
+    farm_col_idx = 35 if df.shape[1] > 35 else (21 if df.shape[1] > 21 else 0)
+    raw_farm = df.iloc[:, farm_col_idx].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+    raw_farm = raw_farm.replace(['nan', 'None', '0', ''], '-')
+    df['farm_name'] = raw_farm.apply(get_farm_with_feed)
 
-    # 농가명 파싱 (21번 열 우선, 없을 시 35번 AJ열)
-    farm_col_idx = 21 if df.shape[1] > 21 else (35 if df.shape[1] > 35 else 0)
-    df['farm_name'] = df.iloc[:, farm_col_idx].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
-    df['farm_name'] = df['farm_name'].replace(['nan', 'None', '0', ''], '-')
+    # 개체별 지육율 및 생체중 파생변수 생성
+    df['pig_dressing_rate'] = df.apply(lambda r: calc_pig_dressing_rate(r['w_num'], r['sex_str']), axis=1)
+    df['pig_live_weight'] = df['w_num'] / (df['pig_dressing_rate'] / 100.0)
 
     def check_no_defect(row_slice):
         for val in row_slice:
@@ -192,7 +216,8 @@ if check_password():
             st.markdown("### ✏️ 2. 거래처별 세부 배정 조건 수정 및 변경")
             st.info("💡 거래처별 **목표두수, 중량, 등지방, 등급, 하자, 배제농가** 항목을 직접 수정하고 하단 버튼을 누르면 배정 연산에 즉시 반영됩니다.")
             
-            calc_target_editor_height = max(350, (len(st.session_state.target_df) + 1) * 38 + 20)
+            # 동적 높이 계산 (공란 없이 행 수에 맞춤)
+            calc_target_editor_height = (len(st.session_state.target_df) + 1) * 35 + 5
             
             edited_target_df = st.data_editor(
                 st.session_state.target_df,
@@ -252,7 +277,8 @@ if check_password():
                             return [''] * len(row)
 
                         styled_summary = display_summary.style.apply(highlight_shortage, axis=1)
-                        calc_summary_height = max(300, (len(display_summary) + 1) * 38 + 20)
+                        # 공란 없이 달성요약표 높이 정확히 계산
+                        calc_summary_height = (len(display_summary) + 1) * 35 + 5
                         
                         st.dataframe(styled_summary, height=calc_summary_height, use_container_width=True, hide_index=True)
 
@@ -267,13 +293,12 @@ if check_password():
                             summary.to_excel(writer, sheet_name='요약')
                         processed_data = output.getvalue()
                         
-                        # 도체번호, 중량, 등지방, 등급 표출 및 인덱스 1부터 부여
+                        # 도체번호(pig_no), 중량, 등지방, 등급 표출 및 인덱스 1부터 부여
                         display_df = pigs[['pig_no', 'w_num', 'f_num', 'grade_str', '배정거래처']].copy()
                         display_df.columns = ['도체번호', '중량', '등지방', '등급', '배정거래처']
                         display_df.index = range(1, len(display_df) + 1)  # 순번 1부터 시작!
                         
-                        # 한눈에 시원하게 보이도록 높이 확대 (최소 600px ~ 1200px)
-                        calc_height = max(600, min(1200, (len(display_df) + 1) * 38 + 20))
+                        calc_height = min(800, (len(display_df) + 1) * 35 + 5)
                         st.dataframe(display_df, height=calc_height, use_container_width=True)
 
                         st.download_button(
@@ -294,7 +319,7 @@ if check_password():
                             display_unalloc_df.columns = ['도체번호', '중량', '등지방', '등급', '배정거래처']
                             display_unalloc_df.index = range(1, len(display_unalloc_df) + 1)  # 순번 1부터 시작!
                             
-                            calc_unalloc_height = max(500, min(1000, (len(display_unalloc_df) + 1) * 38 + 20))
+                            calc_unalloc_height = min(800, (len(display_unalloc_df) + 1) * 35 + 5)
                             st.dataframe(display_unalloc_df, height=calc_unalloc_height, use_container_width=True)
 
                             st.download_button(
@@ -336,7 +361,7 @@ if check_password():
                     display_comp_df.columns = ['도체번호', '중량', '등지방', '등급', '배정거래처']
                     display_comp_df.index = range(1, len(display_comp_df) + 1)  # 순번 1부터 시작!
                     
-                    calc_comp_height = max(400, min(1000, (len(display_comp_df) + 1) * 38 + 20))
+                    calc_comp_height = min(800, (len(display_comp_df) + 1) * 35 + 5)
                     st.dataframe(display_comp_df, height=calc_comp_height, use_container_width=True)
             else:
                 st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
@@ -353,7 +378,7 @@ if check_password():
                     display_tab3_df.columns = ['도체번호', '중량', '등지방', '등급', '배정거래처']
                     display_tab3_df.index = range(1, len(display_tab3_df) + 1)  # 순번 1부터 시작!
                     
-                    calc_tab3_height = max(500, min(1200, (len(display_tab3_df) + 1) * 38 + 20))
+                    calc_tab3_height = min(800, (len(display_tab3_df) + 1) * 35 + 5)
                     st.dataframe(display_tab3_df, height=calc_tab3_height, use_container_width=True)
             else:
                 st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드해 주세요.")
@@ -371,16 +396,14 @@ if check_password():
                 s_val = str(val).strip()
                 if '/' in s_val:
                     parts = s_val.split('/')
-                    return parts[1], parts[0]
+                    return parts[1].strip(), parts[0].strip()
                 return s_val, '-'
 
             # 농가명 정밀 파싱
             if 'farm_name' in pigs_all.columns:
                 pigs_all[['농가_명', '사료사_명']] = pigs_all['farm_name'].apply(lambda x: pd.Series(extract_feed_and_farm(x)))
-            elif 21 in pigs_all.columns:
-                pigs_all[['농가_명', '사료사_명']] = pigs_all[21].apply(lambda x: pd.Series(extract_feed_and_farm(x)))
             else:
-                pigs_all['농가_명'] = '기타농가'
+                pigs_all['농가_명'] = '-'
                 pigs_all['사료사_명'] = '-'
 
             farm_groups = pigs_all.groupby(['농가_명', '사료사_명'])
@@ -390,9 +413,9 @@ if check_password():
                 head_cnt = len(group)
                 total_weight = group['w_num'].sum()
                 
-                # 생체중 계산: 엑셀에 실제 생체중 수치가 있으면 합산, 없으면 표준지육율(76.32%) 기반 추정
-                if 'live_w_num' in group.columns and group['live_w_num'].notna().sum() > 0:
-                    live_weight = group['live_w_num'].sum()
+                # 개체별 연산 기반 생체중 합산
+                if 'pig_live_weight' in group.columns:
+                    live_weight = group['pig_live_weight'].sum()
                 else:
                     live_weight = total_weight / (76.32 / 100.0)
                     
@@ -420,8 +443,8 @@ if check_password():
             total_head = len(pigs_all)
             total_w = pigs_all['w_num'].sum()
             
-            if 'live_w_num' in pigs_all.columns and pigs_all['live_w_num'].notna().sum() > 0:
-                total_live = pigs_all['live_w_num'].sum()
+            if 'pig_live_weight' in pigs_all.columns:
+                total_live = pigs_all['pig_live_weight'].sum()
             else:
                 total_live = total_w / (76.32 / 100.0)
 
@@ -448,8 +471,7 @@ if check_password():
             
             styled_df = final_analysis_df.style.apply(lambda row: ['font-weight: bold; background-color: #f1f3f5;'] * len(row) if row['농가'] == '합계' else [''] * len(row), axis=1)
             
-            # 농가분석 표 시원하게 보이도록 높이 상향
-            calc_height = max(500, (len(final_analysis_df) + 1) * 38 + 20)
+            calc_height = min(800, (len(final_analysis_df) + 1) * 35 + 5)
             st.dataframe(styled_df, height=calc_height, use_container_width=True, hide_index=True)
         else:
             st.info("👈 왼쪽 사이드바에서 [1. 등급판정 파일]을 업로드하시면 농가 분석 결과가 즉시 생성됩니다.")
